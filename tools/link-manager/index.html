@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>リンク帳 | 工場管理</title>
+<style>
+  :root {
+    --ink: #1c1a17;
+    --paper: #faf7f2;
+    --line: #e2dcd2;
+    --amazon: #e88b00;
+    --done: #3a7d44;
+    --accent: #24548f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    font-size: 15px; line-height: 1.6;
+  }
+  header {
+    padding: 18px 16px 12px; border-bottom: 2px solid var(--ink);
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  }
+  header h1 { margin: 0; font-size: 19px; letter-spacing: .02em; }
+  header .count { font-size: 13px; color: #6b645a; }
+  main { max-width: 640px; margin: 0 auto; padding: 14px 14px 80px; }
+  .card {
+    background: #fff; border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 12px;
+  }
+  .card.pending { border-left: 4px solid var(--amazon); }
+  .card.done { border-left: 4px solid var(--done); }
+  .pname { font-weight: 600; margin: 0 0 8px; word-break: break-all; }
+  .row { display: flex; gap: 8px; }
+  input[type="url"], input[type="password"] {
+    flex: 1; min-width: 0; padding: 9px 10px; font-size: 14px;
+    border: 1px solid var(--line); border-radius: 7px; background: var(--paper);
+  }
+  input[type="url"]:focus { outline: 2px solid var(--accent); background: #fff; }
+  a.amz, button {
+    padding: 9px 12px; border-radius: 7px; font-size: 13px; font-weight: 600;
+    border: none; cursor: pointer; text-decoration: none; white-space: nowrap;
+  }
+  a.amz { background: var(--amazon); color: #fff; display: inline-flex; align-items: center; }
+  button.primary { background: var(--ink); color: #fff; }
+  button.ghost { background: transparent; border: 1px solid var(--line); color: #6b645a; }
+  .savebar {
+    position: fixed; bottom: 0; left: 0; right: 0; background: #fff;
+    border-top: 1px solid var(--line); padding: 10px 14px;
+    display: flex; gap: 10px; justify-content: center;
+  }
+  .savebar button.primary { flex: 1; max-width: 400px; padding: 13px; font-size: 15px; }
+  .status { text-align: center; font-size: 13px; color: #6b645a; padding: 8px; }
+  .status.err { color: #b3261e; }
+  details { margin-top: 20px; }
+  summary { cursor: pointer; font-weight: 600; color: #6b645a; }
+  .done .row a.amz { background: var(--done); }
+  #setup { padding: 20px 16px; max-width: 480px; margin: 0 auto; }
+  #setup ol { padding-left: 20px; }
+  .empty { text-align: center; padding: 40px 0; color: #6b645a; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛒 リンク帳</h1>
+  <span class="count" id="count"></span>
+</header>
+
+<div id="setup" hidden>
+  <p><strong>初回設定:</strong> GitHubのアクセストークンを保存します(この端末のブラウザ内にのみ保存されます)。</p>
+  <ol>
+    <li>GitHub → Settings → Developer settings → Fine-grained tokens → Generate new token</li>
+    <li>Repository access: <b>Only select repositories → app-factory</b></li>
+    <li>Permissions: <b>Contents → Read and write</b></li>
+  </ol>
+  <div class="row">
+    <input type="password" id="token" placeholder="github_pat_...">
+    <button class="primary" onclick="saveToken()">保存</button>
+  </div>
+  <p class="status err" id="setupErr"></p>
+</div>
+
+<main id="app" hidden>
+  <div id="pendingList"></div>
+  <details id="doneWrap"><summary id="doneSummary"></summary><div id="doneList"></div></details>
+</main>
+
+<div class="savebar" id="savebar" hidden>
+  <button class="primary" onclick="save()">入力した分を保存</button>
+  <button class="ghost" onclick="load()">再読込</button>
+</div>
+<p class="status" id="status"></p>
+
+<script>
+const OWNER = "haruki-oda-se";
+const REPO = "app-factory";
+const PATH = "amazon_links.txt";
+const API = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}`;
+let sha = null;
+let entries = [];   // {key, url}
+
+const $ = id => document.getElementById(id);
+const token = () => localStorage.getItem("gh_token") || "";
+
+function saveToken() {
+  const t = $("token").value.trim();
+  if (!t) { $("setupErr").textContent = "トークンを入力してください"; return; }
+  localStorage.setItem("gh_token", t);
+  init();
+}
+
+function b64decode(s) { return decodeURIComponent(escape(atob(s.replace(/\n/g, "")))); }
+function b64encode(s) { return btoa(unescape(encodeURIComponent(s))); }
+
+async function load() {
+  $("status").textContent = "読み込み中…";
+  $("status").className = "status";
+  const res = await fetch(API + "?t=" + Date.now(), {
+    headers: { Authorization: "Bearer " + token(), Accept: "application/vnd.github+json" },
+    cache: "no-store"
+  });
+  if (res.status === 401 || res.status === 403) {
+    localStorage.removeItem("gh_token"); init();
+    $("setupErr").textContent = "トークンが無効です。作り直して再入力してください。";
+    return;
+  }
+  if (res.status === 404) {
+    $("status").textContent = "amazon_links.txt がまだリポジトリにありません(工場の初回実行後に作られます)";
+    $("status").className = "status err";
+    return;
+  }
+  const data = await res.json();
+  sha = data.sha;
+  entries = b64decode(data.content).split("\n")
+    .map(l => l.trim()).filter(l => l && !l.startsWith("#"))
+    .map(l => { const i = l.indexOf("|"); return { key: l.slice(0, i).trim(), url: i < 0 ? "" : l.slice(i + 1).trim() }; })
+    .filter(e => e.key);
+  render();
+  $("status").textContent = "";
+}
+
+function render() {
+  const pending = entries.filter(e => !e.url);
+  const done = entries.filter(e => e.url);
+  $("count").textContent = `入力待ち ${pending.length} / 登録済み ${done.length}`;
+  $("pendingList").innerHTML = pending.length ? pending.map(e => card(e, false)).join("")
+    : `<div class="empty">入力待ちはありません 🎉<br>次の選定(毎朝4:00)をお待ちください</div>`;
+  $("doneSummary").textContent = `登録済み ${done.length} 件を表示`;
+  $("doneList").innerHTML = done.map(e => card(e, true)).join("");
+  $("savebar").hidden = pending.length === 0;
+}
+
+function card(e, isDone) {
+  const q = encodeURIComponent(e.key.slice(0, 40));
+  return `<div class="card ${isDone ? "done" : "pending"}">
+    <p class="pname">${esc(e.key)}</p>
+    <div class="row">
+      <input type="url" data-key="${esc(e.key)}" value="${esc(e.url)}" placeholder="AmazonのリンクURLを貼り付け" inputmode="url">
+      <a class="amz" href="https://www.amazon.co.jp/s?k=${q}" target="_blank" rel="noopener">Amazonで探す</a>
+    </div>
+  </div>`;
+}
+
+function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
+
+async function save() {
+  document.querySelectorAll("input[data-key]").forEach(inp => {
+    const e = entries.find(x => x.key === inp.dataset.key);
+    if (e) e.url = inp.value.trim();
+  });
+  const text = "# 商品名キー | AmazonリンクURL(アプリまたは手動で入力。キー部分は編集しない)\n"
+    + entries.map(e => `${e.key} | ${e.url}`).join("\n") + "\n";
+  $("status").textContent = "保存中…";
+  const res = await fetch(API, {
+    method: "PUT",
+    headers: { Authorization: "Bearer " + token(), Accept: "application/vnd.github+json" },
+    body: JSON.stringify({ message: "update: amazon links (link-manager)", content: b64encode(text), sha })
+  });
+  if (res.ok) {
+    $("status").textContent = "✅ 保存しました";
+    await load();
+  } else if (res.status === 409 || res.status === 422) {
+    $("status").textContent = "他の更新と衝突しました。再読込して入力し直してください";
+    $("status").className = "status err";
+  } else {
+    $("status").textContent = "保存に失敗しました (HTTP " + res.status + ")";
+    $("status").className = "status err";
+  }
+}
+
+function init() {
+  const has = !!token();
+  $("setup").hidden = has;
+  $("app").hidden = !has;
+  if (has) load();
+}
+init();
+</script>
+</body>
+</html>
