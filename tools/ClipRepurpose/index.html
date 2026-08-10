@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClipRepurpose | 動画URLからSNS投稿文を自動生成</title>
+<style>
+  :root {
+    --color-bg: #f5f6fa;
+    --color-surface: #ffffff;
+    --color-border: #e1e4ea;
+    --color-text: #1f2430;
+    --color-muted: #6b7280;
+    --color-primary: #4f46e5;
+    --color-primary-dark: #4338ca;
+    --color-error: #dc2626;
+    --color-error-bg: #fef2f2;
+    --color-success-bg: #f0fdf4;
+    --color-success-border: #bbf7d0;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN",
+      "Yu Gothic", Meiryo, sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text);
+    line-height: 1.6;
+  }
+
+  .page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 24px 16px 0;
+  }
+
+  header.hero {
+    text-align: center;
+    padding: 16px 8px 24px;
+  }
+
+  header.hero h1 {
+    font-size: clamp(22px, 6vw, 30px);
+    margin: 0 0 8px;
+    color: var(--color-primary-dark);
+  }
+
+  header.hero p {
+    margin: 0;
+    color: var(--color-muted);
+    font-size: clamp(13px, 3.6vw, 15px);
+  }
+
+  main {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+
+  label {
+    display: block;
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 6px;
+  }
+
+  .input-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  input[type="text"] {
+    flex: 1 1 240px;
+    min-width: 0;
+    padding: 12px 14px;
+    font-size: 15px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: #fafbfc;
+    color: var(--color-text);
+  }
+
+  input[type="text"]:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    background: #fff;
+  }
+
+  button {
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 15px;
+    border: none;
+    border-radius: var(--radius);
+    padding: 12px 18px;
+    font-weight: 600;
+    transition: opacity 0.15s ease;
+  }
+
+  button:active { opacity: 0.8; }
+
+  .btn-primary {
+    background: var(--color-primary);
+    color: #fff;
+    width: 100%;
+    margin-top: 12px;
+  }
+
+  .btn-primary:hover { background: var(--color-primary-dark); }
+
+  .error-message {
+    display: none;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--color-error-bg);
+    border: 1px solid #fecaca;
+    color: var(--color-error);
+    font-size: 13.5px;
+  }
+
+  .error-message.visible { display: block; }
+
+  .results {
+    display: none;
+    margin-top: 24px;
+  }
+
+  .results.visible { display: block; }
+
+  .results-meta {
+    font-size: 13px;
+    color: var(--color-muted);
+    background: var(--color-success-bg);
+    border: 1px solid var(--color-success-border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 10px;
+  }
+
+  .caption-card {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    background: #fafbfc;
+  }
+
+  .caption-card p {
+    margin: 0 0 10px;
+    white-space: pre-wrap;
+    font-size: 14.5px;
+  }
+
+  .hashtags-box {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    background: #fafbfc;
+    margin-bottom: 8px;
+    font-size: 14px;
+    word-break: break-word;
+  }
+
+  .copy-btn {
+    background: #eef0ff;
+    color: var(--color-primary-dark);
+    font-size: 13px;
+    padding: 6px 12px;
+  }
+
+  .copy-btn:hover { background: #e0e3ff; }
+
+  .copy-btn.copied {
+    background: #dcfce7;
+    color: #15803d;
+  }
+
+  footer {
+    text-align: center;
+    padding: 20px 12px 32px;
+    font-size: 13px;
+    color: var(--color-muted);
+  }
+
+  footer a {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  footer a:hover { text-decoration: underline; }
+
+  @media (max-width: 400px) {
+    .page { padding: 16px 12px 0; }
+    main { padding: 16px; }
+    .btn-primary { padding: 13px 16px; }
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <h1>ClipRepurpose</h1>
+      <p>動画のURLを貼り付けてボタンを押すだけで、SNS投稿用のキャプション案とハッシュタグを自動生成します。毎週の投稿文づくりをこのツールにおまかせしましょう。</p>
+    </header>
+
+    <main>
+      <label for="video-url">動画URL</label>
+      <div class="input-row">
+        <input
+          type="text"
+          id="video-url"
+          placeholder="https://www.youtube.com/watch?v=xxxxxxxx"
+          autocomplete="off"
+        >
+      </div>
+      <div class="error-message" id="error-message"></div>
+      <button class="btn-primary" id="generate-btn">投稿文とハッシュタグを生成する</button>
+    </main>
+
+    <div class="results" id="results">
+      <div class="results-meta" id="results-meta"></div>
+
+      <h2 class="section-title">SNS投稿文（3案）</h2>
+      <div id="captions-container"></div>
+
+      <h2 class="section-title">おすすめハッシュタグ</h2>
+      <div class="hashtags-box" id="hashtags-box"></div>
+      <button class="copy-btn" id="copy-hashtags-btn">ハッシュタグをコピー</button>
+    </div>
+
+    <footer>
+      <!-- TODO: noteの実際の記事URLに差し替える -->
+      <p>このツールの作り方は<a href="#" id="note-link">note</a>で公開中</p>
+    </footer>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  var urlInput = document.getElementById("video-url");
+  var errorEl = document.getElementById("error-message");
+  var generateBtn = document.getElementById("generate-btn");
+  var resultsEl = document.getElementById("results");
+  var resultsMetaEl = document.getElementById("results-meta");
+  var captionsContainer = document.getElementById("captions-container");
+  var hashtagsBox = document.getElementById("hashtags-box");
+  var copyHashtagsBtn = document.getElementById("copy-hashtags-btn");
+
+  var PLATFORM_MAP = [
+    { pattern: /(^|\.)youtube\.com$/i, name: "YouTube", tags: ["YouTube", "YouTube動画", "Shorts"] },
+    { pattern: /(^|\.)youtu\.be$/i, name: "YouTube", tags: ["YouTube", "YouTube動画", "Shorts"] },
+    { pattern: /(^|\.)tiktok\.com$/i, name: "TikTok", tags: ["TikTok", "TikTokJapan", "おすすめ載りたい"] },
+    { pattern: /(^|\.)instagram\.com$/i, name: "Instagram", tags: ["Instagram", "リール", "Reels"] },
+    { pattern: /(^|\.)(twitter\.com|x\.com)$/i, name: "X (旧Twitter)", tags: ["X", "Twitter", "ポスト"] },
+    { pattern: /(^|\.)vimeo\.com$/i, name: "Vimeo", tags: ["Vimeo", "動画配信"] },
+    { pattern: /(^|\.)niconico\.jp$/i, name: "ニコニコ動画", tags: ["ニコニコ動画", "ニコ動"] }
+  ];
+
+  var COMMON_HASHTAGS = [
+    "クリエイターエコノミー", "コンテンツ制作", "動画マーケティング", "SNS運用",
+    "SNS運用代行", "毎日投稿", "クリエイター", "発信",
+    "動画編集", "バズる動画", "SNSマーケティング", "コンテンツ発信",
+    "フォロバ100", "拡散希望", "副業クリエイター"
+  ];
+
+  var CAPTION_TEMPLATES = [
+    "🎬 新しい動画を公開しました！\n{platform}でぜひチェックしてみてください✨\nどんな発見があったか、コメントで教えてください👇\n\n{url}",
+    "今回の動画では気になるテーマを取り上げています🙌\n最後まで見ていただけると嬉しいです。\n保存して後で見返すのもおすすめです📌\n\n{url}",
+    "【新着動画】\n{platform}に投稿しました！\n少しでも参考になったら、いいね・シェアで応援してもらえると励みになります💪\n\n{url}",
+    "動画、更新しました🎥\n忙しい方はまず1分だけでも見てみてください。\n感想やリクエストはコメント欄で待ってます📝\n\n{url}",
+    "毎週の投稿、今週分をお届けします🔥\n{platform}で公開中なので、まだの方はぜひ視聴してみてください！\n\n{url}"
+  ];
+
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = a[i];
+      a[i] = a[j];
+      a[j] = tmp;
+    }
+    return a;
+  }
+
+  function detectPlatform(hostname) {
+    for (var i = 0; i < PLATFORM_MAP.length; i++) {
+      if (PLATFORM_MAP[i].pattern.test(hostname)) {
+        return PLATFORM_MAP[i];
+      }
+    }
+    return { name: "SNS", tags: ["動画配信", "動画共有"] };
+  }
+
+  function showError(message) {
+    errorEl.textContent = message;
+    errorEl.classList.add("visible");
+    resultsEl.classList.remove("visible");
+  }
+
+  function clearError() {
+    errorEl.textContent = "";
+    errorEl.classList.remove("visible");
+  }
+
+  function validateUrl(raw) {
+    if (!raw || !raw.trim()) {
+      return { ok: false, message: "動画URLを入力してください。" };
+    }
+    var trimmed = raw.trim();
+    var parsed;
+    try {
+      parsed = new URL(trimmed);
+    } catch (e) {
+      return { ok: false, message: "正しいURL形式で入力してください（例: https://www.youtube.com/watch?v=xxxx）。" };
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { ok: false, message: "http:// または https:// から始まるURLを入力してください。" };
+    }
+    if (!parsed.hostname) {
+      return { ok: false, message: "URLにドメインが含まれていません。正しいURLを入力してください。" };
+    }
+    return { ok: true, url: parsed };
+  }
+
+  function buildCaptions(platformName, urlStr) {
+    var picks = shuffle(CAPTION_TEMPLATES).slice(0, 3);
+    return picks.map(function (t) {
+      return t.replace("{platform}", platformName).replace("{url}", urlStr);
+    });
+  }
+
+  function buildHashtags(platformTags) {
+    var platformPart = shuffle(platformTags).slice(0, Math.min(2, platformTags.length));
+    var commonPart = shuffle(COMMON_HASHTAGS).slice(0, 9);
+    var all = platformPart.concat(commonPart);
+    var seen = {};
+    var unique = [];
+    all.forEach(function (tag) {
+      var key = tag.toLowerCase();
+      if (!seen[key]) {
+        seen[key] = true;
+        unique.push(tag);
+      }
+    });
+    return unique.map(function (t) { return "#" + t; });
+  }
+
+  function renderResults(urlStr, platform) {
+    resultsMetaEl.textContent = "検出したプラットフォーム: " + platform.name;
+
+    var captions = buildCaptions(platform.name, urlStr);
+    captionsContainer.innerHTML = "";
+    captions.forEach(function (text, idx) {
+      var card = document.createElement("div");
+      card.className = "caption-card";
+
+      var p = document.createElement("p");
+      p.textContent = text;
+
+      var btn = document.createElement("button");
+      btn.className = "copy-btn";
+      btn.textContent = "この投稿文をコピー";
+      btn.addEventListener("click", function () {
+        copyToClipboard(text, btn, "この投稿文をコピー");
+      });
+
+      card.appendChild(p);
+      card.appendChild(btn);
+      captionsContainer.appendChild(card);
+    });
+
+    var hashtags = buildHashtags(platform.tags);
+    var hashtagStr = hashtags.join(" ");
+    hashtagsBox.textContent = hashtagStr;
+    copyHashtagsBtn.onclick = function () {
+      copyToClipboard(hashtagStr, copyHashtagsBtn, "ハッシュタグをコピー");
+    };
+
+    resultsEl.classList.add("visible");
+  }
+
+  function copyToClipboard(text, btn, originalLabel) {
+    function onSuccess() {
+      btn.textContent = "コピーしました！";
+      btn.classList.add("copied");
+      setTimeout(function () {
+        btn.textContent = originalLabel;
+        btn.classList.remove("copied");
+      }, 1500);
+    }
+    function onFailure() {
+      btn.textContent = "コピーに失敗しました";
+      setTimeout(function () {
+        btn.textContent = originalLabel;
+      }, 1500);
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(onSuccess, function () {
+        fallbackCopy(text) ? onSuccess() : onFailure();
+      });
+    } else {
+      fallbackCopy(text) ? onSuccess() : onFailure();
+    }
+  }
+
+  function fallbackCopy(text) {
+    var textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    var success = false;
+    try {
+      success = document.execCommand("copy");
+    } catch (e) {
+      success = false;
+    }
+    document.body.removeChild(textarea);
+    return success;
+  }
+
+  function handleGenerate() {
+    clearError();
+    var result = validateUrl(urlInput.value);
+    if (!result.ok) {
+      showError(result.message);
+      return;
+    }
+    var platform = detectPlatform(result.url.hostname);
+    renderResults(result.url.href, platform);
+  }
+
+  generateBtn.addEventListener("click", handleGenerate);
+  urlInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      handleGenerate();
+    }
+  });
+  urlInput.addEventListener("input", clearError);
+})();
+</script>
+</body>
+</html>

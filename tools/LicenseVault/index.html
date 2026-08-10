@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LicenseVault | ライセンス管理ツール</title>
+<style>
+  :root{
+    --bg:#0f1420;
+    --panel:#161d2e;
+    --panel-2:#1d2537;
+    --border:#2a3348;
+    --text:#e7ebf3;
+    --muted:#9aa4bd;
+    --accent:#5b8cff;
+    --accent-2:#3ecf8e;
+    --danger:#ff6b6b;
+    --warn:#ffc857;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Hiragino Sans,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    line-height:1.6;
+  }
+  .wrap{
+    max-width:960px;
+    margin:0 auto;
+    padding:20px 16px 40px;
+  }
+  header.hero{
+    margin-bottom:24px;
+  }
+  header.hero h1{
+    font-size:1.6rem;
+    margin:0 0 6px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  header.hero .badge{
+    font-size:0.65rem;
+    background:var(--accent);
+    color:#0b0f19;
+    padding:2px 8px;
+    border-radius:999px;
+    font-weight:700;
+    letter-spacing:0.03em;
+  }
+  header.hero p{
+    margin:0;
+    color:var(--muted);
+    font-size:0.92rem;
+  }
+
+  .stats{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+    margin:20px 0;
+  }
+  .stat{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:12px 14px;
+    text-align:center;
+  }
+  .stat .num{
+    font-size:1.5rem;
+    font-weight:700;
+  }
+  .stat .label{
+    font-size:0.75rem;
+    color:var(--muted);
+    margin-top:2px;
+  }
+  .stat.warn .num{color:var(--warn);}
+  .stat.danger .num{color:var(--danger);}
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:16px;
+    margin-bottom:20px;
+  }
+  .panel h2{
+    font-size:1rem;
+    margin:0 0 14px;
+  }
+
+  form.grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px 14px;
+  }
+  form.grid .full{grid-column:1 / -1;}
+
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{
+    font-size:0.8rem;
+    color:var(--muted);
+  }
+  .field .required{color:var(--danger);}
+
+  input[type=text],
+  input[type=date]{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    padding:9px 10px;
+    border-radius:8px;
+    font-size:0.92rem;
+    width:100%;
+  }
+  input:focus{
+    outline:none;
+    border-color:var(--accent);
+  }
+  input.error{
+    border-color:var(--danger);
+  }
+  .err-msg{
+    color:var(--danger);
+    font-size:0.75rem;
+    min-height:1em;
+  }
+
+  .key-row{
+    display:flex;
+    gap:8px;
+  }
+  .key-row input{flex:1;}
+
+  button{
+    font-family:inherit;
+    cursor:pointer;
+    border:none;
+    border-radius:8px;
+    padding:9px 14px;
+    font-size:0.88rem;
+    font-weight:600;
+    transition:opacity .15s;
+  }
+  button:hover{opacity:0.88;}
+  button:active{opacity:0.7;}
+  .btn-primary{background:var(--accent);color:#0b0f19;}
+  .btn-secondary{background:var(--panel-2);color:var(--text);border:1px solid var(--border);}
+  .btn-danger{background:rgba(255,107,107,0.15);color:var(--danger);border:1px solid rgba(255,107,107,0.4);}
+  .btn-small{padding:6px 10px;font-size:0.78rem;}
+
+  .actions-row{
+    display:flex;
+    gap:10px;
+    margin-top:4px;
+  }
+
+  .toolbar{
+    display:flex;
+    gap:10px;
+    margin-bottom:14px;
+    flex-wrap:wrap;
+  }
+  .toolbar input{flex:1;min-width:160px;}
+  .toolbar select{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    padding:9px 10px;
+    border-radius:8px;
+    font-size:0.88rem;
+  }
+
+  .list{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .card{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:12px 14px;
+  }
+  .card-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .card-title{
+    font-weight:700;
+    font-size:0.98rem;
+  }
+  .card-sub{
+    color:var(--muted);
+    font-size:0.8rem;
+    margin-top:2px;
+  }
+  .status{
+    font-size:0.7rem;
+    font-weight:700;
+    padding:3px 9px;
+    border-radius:999px;
+    white-space:nowrap;
+  }
+  .status.active{background:rgba(62,207,142,0.15);color:var(--accent-2);}
+  .status.soon{background:rgba(255,200,87,0.15);color:var(--warn);}
+  .status.expired{background:rgba(255,107,107,0.15);color:var(--danger);}
+
+  .card-body{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:6px 14px;
+    margin-top:10px;
+    font-size:0.85rem;
+  }
+  .card-body .k{color:var(--muted);font-size:0.72rem;}
+  .card-body .v{
+    font-family:"SFMono-Regular",Consolas,Menlo,monospace;
+    word-break:break-all;
+  }
+  .card-body .full{grid-column:1 / -1;}
+
+  .card-actions{
+    display:flex;
+    gap:8px;
+    margin-top:10px;
+  }
+
+  .empty{
+    text-align:center;
+    color:var(--muted);
+    padding:30px 10px;
+    font-size:0.88rem;
+  }
+
+  footer{
+    margin-top:30px;
+    text-align:center;
+    font-size:0.8rem;
+    color:var(--muted);
+    padding-top:16px;
+    border-top:1px solid var(--border);
+  }
+  footer a{color:var(--accent);text-decoration:none;}
+  footer a:hover{text-decoration:underline;}
+
+  @media (max-width:480px){
+    form.grid{grid-template-columns:1fr;}
+    .stats{grid-template-columns:1fr 1fr;}
+    .card-body{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>LicenseVault <span class="badge">BETA</span></h1>
+    <p>販売ソフトのライセンスキーと更新期限をこの画面だけで一元管理できます。新規発行時はキーを自動生成し、一覧では期限間近・期限切れを自動判定して表示します。</p>
+  </header>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="num" id="statTotal">0</div>
+      <div class="label">登録数</div>
+    </div>
+    <div class="stat warn">
+      <div class="num" id="statSoon">0</div>
+      <div class="label">期限間近(30日以内)</div>
+    </div>
+    <div class="stat danger">
+      <div class="num" id="statExpired">0</div>
+      <div class="label">期限切れ</div>
+    </div>
+  </div>
+
+  <section class="panel">
+    <h2 id="formTitle">新規ライセンス登録</h2>
+    <form class="grid" id="licenseForm" novalidate>
+      <input type="hidden" id="editId">
+
+      <div class="field">
+        <label for="customer">顧客名 <span class="required">*</span></label>
+        <input type="text" id="customer" maxlength="50" placeholder="例: 株式会社サンプル">
+        <div class="err-msg" id="err-customer"></div>
+      </div>
+
+      <div class="field">
+        <label for="product">商品名 <span class="required">*</span></label>
+        <input type="text" id="product" maxlength="50" placeholder="例: Sample Pro v2">
+        <div class="err-msg" id="err-product"></div>
+      </div>
+
+      <div class="field full">
+        <label for="licenseKey">ライセンスキー <span class="required">*</span></label>
+        <div class="key-row">
+          <input type="text" id="licenseKey" maxlength="64" placeholder="例: XXXX-XXXX-XXXX-XXXX">
+          <button type="button" class="btn-secondary" id="genKeyBtn">自動生成</button>
+        </div>
+        <div class="err-msg" id="err-licenseKey"></div>
+      </div>
+
+      <div class="field">
+        <label for="issueDate">発行日 <span class="required">*</span></label>
+        <input type="date" id="issueDate">
+        <div class="err-msg" id="err-issueDate"></div>
+      </div>
+
+      <div class="field">
+        <label for="expiryDate">更新期限 <span class="required">*</span></label>
+        <input type="date" id="expiryDate">
+        <div class="err-msg" id="err-expiryDate"></div>
+      </div>
+
+      <div class="field full">
+        <label for="memo">メモ(任意)</label>
+        <input type="text" id="memo" maxlength="100" placeholder="例: 年間契約、担当:山田">
+      </div>
+
+      <div class="full actions-row">
+        <button type="submit" class="btn-primary" id="submitBtn">登録する</button>
+        <button type="button" class="btn-secondary" id="cancelEditBtn" style="display:none;">編集をキャンセル</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>登録済みライセンス一覧</h2>
+    <div class="toolbar">
+      <input type="text" id="searchBox" placeholder="顧客名・商品名で検索">
+      <select id="filterStatus">
+        <option value="all">すべての状態</option>
+        <option value="active">有効</option>
+        <option value="soon">期限間近</option>
+        <option value="expired">期限切れ</option>
+      </select>
+    </div>
+    <div class="list" id="listArea"></div>
+    <div class="empty" id="emptyMsg" style="display:none;">登録されているライセンスがありません。</div>
+  </section>
+
+  <footer>
+    <!-- TODO: noteの記事URLをここに設定する -->
+    <p>このツールの作り方は<a href="#" id="noteLink">note</a>で公開中</p>
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var STORAGE_KEY = "licensevault.entries.v1";
+  var SOON_DAYS = 30;
+
+  var els = {
+    form: document.getElementById("licenseForm"),
+    editId: document.getElementById("editId"),
+    customer: document.getElementById("customer"),
+    product: document.getElementById("product"),
+    licenseKey: document.getElementById("licenseKey"),
+    issueDate: document.getElementById("issueDate"),
+    expiryDate: document.getElementById("expiryDate"),
+    memo: document.getElementById("memo"),
+    genKeyBtn: document.getElementById("genKeyBtn"),
+    submitBtn: document.getElementById("submitBtn"),
+    cancelEditBtn: document.getElementById("cancelEditBtn"),
+    formTitle: document.getElementById("formTitle"),
+    listArea: document.getElementById("listArea"),
+    emptyMsg: document.getElementById("emptyMsg"),
+    searchBox: document.getElementById("searchBox"),
+    filterStatus: document.getElementById("filterStatus"),
+    statTotal: document.getElementById("statTotal"),
+    statSoon: document.getElementById("statSoon"),
+    statExpired: document.getElementById("statExpired")
+  };
+
+  function loadEntries(){
+    try{
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return [];
+      var parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    }catch(e){
+      return [];
+    }
+  }
+
+  function saveEntries(entries){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  }
+
+  var entries = loadEntries();
+
+  function uid(){
+    return "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+  }
+
+  function genLicenseKey(){
+    var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    var groups = [];
+    for(var g = 0; g < 4; g++){
+      var group = "";
+      var randomValues = new Uint32Array(4);
+      window.crypto.getRandomValues(randomValues);
+      for(var i = 0; i < 4; i++){
+        group += chars[randomValues[i] % chars.length];
+      }
+      groups.push(group);
+    }
+    return groups.join("-");
+  }
+
+  function todayStr(){
+    var d = new Date();
+    var m = String(d.getMonth() + 1).padStart(2, "0");
+    var day = String(d.getDate()).padStart(2, "0");
+    return d.getFullYear() + "-" + m + "-" + day;
+  }
+
+  function daysUntil(dateStr){
+    var today = new Date(todayStr() + "T00:00:00");
+    var target = new Date(dateStr + "T00:00:00");
+    return Math.round((target - today) / (1000 * 60 * 60 * 24));
+  }
+
+  function getStatus(entry){
+    var d = daysUntil(entry.expiryDate);
+    if(d < 0) return "expired";
+    if(d <= SOON_DAYS) return "soon";
+    return "active";
+  }
+
+  function statusLabel(status){
+    if(status === "expired") return "期限切れ";
+    if(status === "soon") return "期限間近";
+    return "有効";
+  }
+
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, function(ch){
+      return ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[ch];
+    });
+  }
+
+  function clearErrors(){
+    ["customer","product","licenseKey","issueDate","expiryDate"].forEach(function(id){
+      document.getElementById("err-" + id).textContent = "";
+      els[id].classList.remove("error");
+    });
+  }
+
+  function setError(id, message){
+    document.getElementById("err-" + id).textContent = message;
+    els[id].classList.add("error");
+  }
+
+  function validate(data){
+    var valid = true;
+
+    if(!data.customer){
+      setError("customer", "顧客名を入力してください。");
+      valid = false;
+    }else if(data.customer.length > 50){
+      setError("customer", "顧客名は50文字以内で入力してください。");
+      valid = false;
+    }
+
+    if(!data.product){
+      setError("product", "商品名を入力してください。");
+      valid = false;
+    }else if(data.product.length > 50){
+      setError("product", "商品名は50文字以内で入力してください。");
+      valid = false;
+    }
+
+    if(!data.licenseKey){
+      setError("licenseKey", "ライセンスキーを入力するか、自動生成してください。");
+      valid = false;
+    }else if(data.licenseKey.length > 64){
+      setError("licenseKey", "ライセンスキーは64文字以内で入力してください。");
+      valid = false;
+    }else{
+      var dup = entries.some(function(e){
+        return e.licenseKey === data.licenseKey && e.id !== data.id;
+      });
+      if(dup){
+        setError("licenseKey", "同じライセンスキーが既に登録されています。");
+        valid = false;
+      }
+    }
+
+    if(!data.issueDate){
+      setError("issueDate", "発行日を入力してください。");
+      valid = false;
+    }
+
+    if(!data.expiryDate){
+      setError("expiryDate", "更新期限を入力してください。");
+      valid = false;
+    }
+
+    if(data.issueDate && data.expiryDate && data.expiryDate < data.issueDate){
+      setError("expiryDate", "更新期限は発行日以降の日付にしてください。");
+      valid = false;
+    }
+
+    return valid;
+  }
+
+  function resetForm(){
+    els.form.reset();
+    els.editId.value = "";
+    els.formTitle.textContent = "新規ライセンス登録";
+    els.submitBtn.textContent = "登録する";
+    els.cancelEditBtn.style.display = "none";
+    clearErrors();
+  }
+
+  function startEdit(id){
+    var entry = entries.find(function(e){ return e.id === id; });
+    if(!entry) return;
+    els.editId.value = entry.id;
+    els.customer.value = entry.customer;
+    els.product.value = entry.product;
+    els.licenseKey.value = entry.licenseKey;
+    els.issueDate.value = entry.issueDate;
+    els.expiryDate.value = entry.expiryDate;
+    els.memo.value = entry.memo || "";
+    els.formTitle.textContent = "ライセンスを編集";
+    els.submitBtn.textContent = "更新する";
+    els.cancelEditBtn.style.display = "inline-block";
+    clearErrors();
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+
+  function deleteEntry(id){
+    if(!window.confirm("このライセンス登録を削除しますか?")) return;
+    entries = entries.filter(function(e){ return e.id !== id; });
+    saveEntries(entries);
+    render();
+  }
+
+  function render(){
+    var query = els.searchBox.value.trim().toLowerCase();
+    var filterStatus = els.filterStatus.value;
+
+    var sorted = entries.slice().sort(function(a, b){
+      return a.expiryDate < b.expiryDate ? -1 : (a.expiryDate > b.expiryDate ? 1 : 0);
+    });
+
+    var total = entries.length;
+    var soonCount = 0;
+    var expiredCount = 0;
+    entries.forEach(function(e){
+      var s = getStatus(e);
+      if(s === "soon") soonCount++;
+      if(s === "expired") expiredCount++;
+    });
+    els.statTotal.textContent = total;
+    els.statSoon.textContent = soonCount;
+    els.statExpired.textContent = expiredCount;
+
+    var visible = sorted.filter(function(e){
+      var matchesQuery = !query ||
+        e.customer.toLowerCase().indexOf(query) !== -1 ||
+        e.product.toLowerCase().indexOf(query) !== -1;
+      var status = getStatus(e);
+      var matchesStatus = filterStatus === "all" || filterStatus === status;
+      return matchesQuery && matchesStatus;
+    });
+
+    els.listArea.innerHTML = "";
+
+    if(visible.length === 0){
+      els.emptyMsg.style.display = "block";
+      els.emptyMsg.textContent = entries.length === 0
+        ? "登録されているライセンスがありません。"
+        : "条件に一致するライセンスがありません。";
+      return;
+    }
+    els.emptyMsg.style.display = "none";
+
+    visible.forEach(function(entry){
+      var status = getStatus(entry);
+      var d = daysUntil(entry.expiryDate);
+      var remainText = status === "expired"
+        ? ("期限切れ(" + Math.abs(d) + "日経過)")
+        : ("残り" + d + "日");
+
+      var card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML =
+        '<div class="card-top">' +
+          '<div>' +
+            '<div class="card-title">' + escapeHtml(entry.customer) + '</div>' +
+            '<div class="card-sub">' + escapeHtml(entry.product) + '</div>' +
+          '</div>' +
+          '<span class="status ' + status + '">' + statusLabel(status) + '</span>' +
+        '</div>' +
+        '<div class="card-body">' +
+          '<div><div class="k">ライセンスキー</div><div class="v">' + escapeHtml(entry.licenseKey) + '</div></div>' +
+          '<div><div class="k">残り日数</div><div class="v">' + escapeHtml(remainText) + '</div></div>' +
+          '<div><div class="k">発行日</div><div class="v">' + escapeHtml(entry.issueDate) + '</div></div>' +
+          '<div><div class="k">更新期限</div><div class="v">' + escapeHtml(entry.expiryDate) + '</div></div>' +
+          (entry.memo ? '<div class="full"><div class="k">メモ</div><div class="v">' + escapeHtml(entry.memo) + '</div></div>' : '') +
+        '</div>' +
+        '<div class="card-actions">' +
+          '<button type="button" class="btn-secondary btn-small" data-action="edit" data-id="' + entry.id + '">編集</button>' +
+          '<button type="button" class="btn-danger btn-small" data-action="delete" data-id="' + entry.id + '">削除</button>' +
+        '</div>';
+      els.listArea.appendChild(card);
+    });
+  }
+
+  els.listArea.addEventListener("click", function(ev){
+    var btn = ev.target.closest("button[data-action]");
+    if(!btn) return;
+    var id = btn.getAttribute("data-id");
+    if(btn.getAttribute("data-action") === "edit"){
+      startEdit(id);
+    }else if(btn.getAttribute("data-action") === "delete"){
+      deleteEntry(id);
+    }
+  });
+
+  els.genKeyBtn.addEventListener("click", function(){
+    els.licenseKey.value = genLicenseKey();
+    els.licenseKey.classList.remove("error");
+    document.getElementById("err-licenseKey").textContent = "";
+  });
+
+  els.cancelEditBtn.addEventListener("click", function(){
+    resetForm();
+  });
+
+  els.searchBox.addEventListener("input", render);
+  els.filterStatus.addEventListener("change", render);
+
+  els.form.addEventListener("submit", function(ev){
+    ev.preventDefault();
+    clearErrors();
+
+    var data = {
+      id: els.editId.value || uid(),
+      customer: els.customer.value.trim(),
+      product: els.product.value.trim(),
+      licenseKey: els.licenseKey.value.trim(),
+      issueDate: els.issueDate.value,
+      expiryDate: els.expiryDate.value,
+      memo: els.memo.value.trim()
+    };
+
+    if(!validate(data)) return;
+
+    var existingIndex = entries.findIndex(function(e){ return e.id === data.id; });
+    if(existingIndex >= 0){
+      entries[existingIndex] = data;
+    }else{
+      entries.push(data);
+    }
+    saveEntries(entries);
+    resetForm();
+    render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

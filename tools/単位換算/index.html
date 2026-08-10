@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>単位換算 | 料理の単位変換ツール</title>
+<style>
+  :root {
+    --bg: #f7f5f2;
+    --card-bg: #ffffff;
+    --accent: #d97a3f;
+    --accent-dark: #b8622f;
+    --text: #333333;
+    --text-sub: #6b6b6b;
+    --border: #e2ddd6;
+    --error: #c0392b;
+    --error-bg: #fdecea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  .wrap {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 24px 16px 40px;
+  }
+  header h1 {
+    font-size: 1.5rem;
+    margin: 0 0 8px;
+    color: var(--accent-dark);
+  }
+  header p {
+    font-size: 0.9rem;
+    color: var(--text-sub);
+    margin: 0 0 24px;
+  }
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .tab-btn {
+    flex: 1 1 auto;
+    min-width: 90px;
+    padding: 10px 8px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    color: var(--text);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    text-align: center;
+  }
+  .tab-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: bold;
+  }
+  .panel {
+    display: none;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 16px;
+  }
+  .panel.active {
+    display: block;
+  }
+  .field {
+    margin-bottom: 16px;
+  }
+  label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-sub);
+    margin-bottom: 6px;
+  }
+  input[type="text"], select {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--text);
+  }
+  input[type="text"]:focus, select:focus {
+    outline: 2px solid var(--accent);
+    border-color: var(--accent);
+  }
+  .row {
+    display: flex;
+    gap: 10px;
+  }
+  .row > div {
+    flex: 1;
+  }
+  .swap-btn {
+    display: block;
+    margin: 4px auto 16px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 16px;
+    font-size: 0.8rem;
+    color: var(--accent-dark);
+    cursor: pointer;
+  }
+  .swap-btn:hover {
+    background: var(--bg);
+  }
+  .result {
+    margin-top: 8px;
+    padding: 16px;
+    background: #fbf3ea;
+    border: 1px solid #f0dcc4;
+    border-radius: 10px;
+    font-size: 1.1rem;
+    text-align: center;
+    color: var(--accent-dark);
+    font-weight: bold;
+    word-break: break-word;
+  }
+  .error-msg {
+    margin-top: 8px;
+    padding: 10px 12px;
+    background: var(--error-bg);
+    border: 1px solid #f3c6c1;
+    color: var(--error);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    display: none;
+  }
+  .error-msg.show {
+    display: block;
+  }
+  .note {
+    font-size: 0.75rem;
+    color: var(--text-sub);
+    margin-top: 12px;
+  }
+  footer {
+    margin-top: 32px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-sub);
+  }
+  footer a {
+    color: var(--accent-dark);
+  }
+  @media (max-width: 380px) {
+    .tab-btn { font-size: 0.75rem; padding: 8px 4px; }
+    header h1 { font-size: 1.3rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>単位換算</h1>
+    <p>料理で使う単位をかんたんに変換します。「体積」「重量」タブでは単位同士を変換、「材料換算」タブでは材料の体積(カップ・大さじなど)を重さ(g)に変換できます。</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="volume">体積変換</button>
+    <button class="tab-btn" data-tab="weight">重量変換</button>
+    <button class="tab-btn" data-tab="ingredient">材料換算</button>
+  </div>
+
+  <!-- 体積変換 -->
+  <section class="panel active" id="panel-volume">
+    <div class="field">
+      <label for="vol-input">変換したい数値</label>
+      <input type="text" id="vol-input" inputmode="decimal" placeholder="例: 200">
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="vol-from">変換前の単位</label>
+        <select id="vol-from">
+          <option value="ml">ml</option>
+          <option value="l">L</option>
+          <option value="cup">カップ (200ml)</option>
+          <option value="tbsp">大さじ (15ml)</option>
+          <option value="tsp">小さじ (5ml)</option>
+          <option value="go">合 (180ml)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="vol-to">変換後の単位</label>
+        <select id="vol-to">
+          <option value="ml">ml</option>
+          <option value="l">L</option>
+          <option value="cup" selected>カップ (200ml)</option>
+          <option value="tbsp">大さじ (15ml)</option>
+          <option value="tsp">小さじ (5ml)</option>
+          <option value="go">合 (180ml)</option>
+        </select>
+      </div>
+    </div>
+    <button class="swap-btn" data-swap="volume">↑↓ 単位を入れ替える</button>
+    <div class="error-msg" id="vol-error"></div>
+    <div class="result" id="vol-result">結果がここに表示されます</div>
+  </section>
+
+  <!-- 重量変換 -->
+  <section class="panel" id="panel-weight">
+    <div class="field">
+      <label for="weight-input">変換したい数値</label>
+      <input type="text" id="weight-input" inputmode="decimal" placeholder="例: 100">
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="weight-from">変換前の単位</label>
+        <select id="weight-from">
+          <option value="mg">mg</option>
+          <option value="g">g</option>
+          <option value="kg">kg</option>
+          <option value="oz">オンス (oz)</option>
+          <option value="lb">ポンド (lb)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="weight-to">変換後の単位</label>
+        <select id="weight-to">
+          <option value="mg">mg</option>
+          <option value="g" selected>g</option>
+          <option value="kg">kg</option>
+          <option value="oz">オンス (oz)</option>
+          <option value="lb">ポンド (lb)</option>
+        </select>
+      </div>
+    </div>
+    <button class="swap-btn" data-swap="weight">↑↓ 単位を入れ替える</button>
+    <div class="error-msg" id="weight-error"></div>
+    <div class="result" id="weight-result">結果がここに表示されます</div>
+  </section>
+
+  <!-- 材料換算 -->
+  <section class="panel" id="panel-ingredient">
+    <div class="field">
+      <label for="ing-select">材料</label>
+      <select id="ing-select">
+        <option value="water">水・牛乳・酒など (1.0 g/ml)</option>
+        <option value="flour">薄力粉 (0.55 g/ml)</option>
+        <option value="sugar">上白糖 (0.65 g/ml)</option>
+        <option value="salt">塩 (0.9 g/ml)</option>
+        <option value="butter">バター (0.9 g/ml)</option>
+        <option value="rice">米 (0.833 g/ml)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="ing-input">数値</label>
+      <input type="text" id="ing-input" inputmode="decimal" placeholder="例: 1">
+    </div>
+    <div class="row">
+      <div class="field">
+        <label for="ing-from">変換前の単位</label>
+        <select id="ing-from">
+          <option value="cup">カップ (200ml)</option>
+          <option value="tbsp">大さじ (15ml)</option>
+          <option value="tsp">小さじ (5ml)</option>
+          <option value="go">合 (180ml)</option>
+          <option value="ml">ml</option>
+          <option value="g">g</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="ing-to">変換後の単位</label>
+        <select id="ing-to">
+          <option value="g" selected>g</option>
+          <option value="cup">カップ (200ml)</option>
+          <option value="tbsp">大さじ (15ml)</option>
+          <option value="tsp">小さじ (5ml)</option>
+          <option value="go">合 (180ml)</option>
+          <option value="ml">ml</option>
+        </select>
+      </div>
+    </div>
+    <div class="error-msg" id="ing-error"></div>
+    <div class="result" id="ing-result">結果がここに表示されます</div>
+    <p class="note">※ 材料の密度は目安値です。銘柄や状態(ふるった粉かどうか等)により誤差が生じます。</p>
+  </section>
+
+  <footer>
+    <!-- TODO: noteの記事URLに差し替える -->
+    <p>このツールの作り方は<a href="#" id="note-link">note</a>で公開中</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- タブ切り替え ----
+  var tabBtns = document.querySelectorAll(".tab-btn");
+  var panels = document.querySelectorAll(".panel");
+  tabBtns.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      tabBtns.forEach(function (b) { b.classList.remove("active"); });
+      panels.forEach(function (p) { p.classList.remove("active"); });
+      btn.classList.add("active");
+      document.getElementById("panel-" + btn.dataset.tab).classList.add("active");
+    });
+  });
+
+  // ---- 数値バリデーション ----
+  function parseNumberInput(rawValue) {
+    var trimmed = (rawValue || "").trim();
+    if (trimmed === "") {
+      return { ok: false, message: "数値を入力してください。" };
+    }
+    // 全角数字・記号を半角に変換
+    var normalized = trimmed.replace(/[０-９．－]/g, function (ch) {
+      return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0);
+    });
+    if (!/^-?\d*\.?\d+$/.test(normalized)) {
+      return { ok: false, message: "半角数字で入力してください（例: 100, 1.5）。" };
+    }
+    var num = parseFloat(normalized);
+    if (isNaN(num)) {
+      return { ok: false, message: "数値として認識できませんでした。" };
+    }
+    if (num < 0) {
+      return { ok: false, message: "0以上の数値を入力してください。" };
+    }
+    if (num > 1000000) {
+      return { ok: false, message: "数値が大きすぎます。1,000,000以下で入力してください。" };
+    }
+    return { ok: true, value: num };
+  }
+
+  function showError(errorEl, resultEl, message) {
+    errorEl.textContent = message;
+    errorEl.classList.add("show");
+    resultEl.textContent = "結果がここに表示されます";
+  }
+
+  function clearError(errorEl) {
+    errorEl.textContent = "";
+    errorEl.classList.remove("show");
+  }
+
+  function formatNumber(num) {
+    if (!isFinite(num)) return "計算できません";
+    var rounded = Math.round(num * 10000) / 10000;
+    return rounded.toLocaleString("ja-JP", { maximumFractionDigits: 4 });
+  }
+
+  // ---- 体積変換 ----
+  var volumeToMl = {
+    ml: 1,
+    l: 1000,
+    cup: 200,
+    tbsp: 15,
+    tsp: 5,
+    go: 180
+  };
+  var volumeLabels = {
+    ml: "ml", l: "L", cup: "カップ", tbsp: "大さじ", tsp: "小さじ", go: "合"
+  };
+
+  var volInput = document.getElementById("vol-input");
+  var volFrom = document.getElementById("vol-from");
+  var volTo = document.getElementById("vol-to");
+  var volError = document.getElementById("vol-error");
+  var volResult = document.getElementById("vol-result");
+
+  function calcVolume() {
+    var parsed = parseNumberInput(volInput.value);
+    if (!parsed.ok) {
+      if (volInput.value.trim() === "") {
+        clearError(volError);
+        volResult.textContent = "結果がここに表示されます";
+        return;
+      }
+      showError(volError, volResult, parsed.message);
+      return;
+    }
+    clearError(volError);
+    var ml = parsed.value * volumeToMl[volFrom.value];
+    var result = ml / volumeToMl[volTo.value];
+    volResult.textContent = parsed.value + " " + volumeLabels[volFrom.value] + " = " + formatNumber(result) + " " + volumeLabels[volTo.value];
+  }
+
+  [volInput, volFrom, volTo].forEach(function (el) {
+    el.addEventListener("input", calcVolume);
+  });
+
+  document.querySelector('[data-swap="volume"]').addEventListener("click", function () {
+    var tmp = volFrom.value;
+    volFrom.value = volTo.value;
+    volTo.value = tmp;
+    calcVolume();
+  });
+
+  // ---- 重量変換 ----
+  var weightToG = {
+    mg: 0.001,
+    g: 1,
+    kg: 1000,
+    oz: 28.3495,
+    lb: 453.592
+  };
+  var weightLabels = {
+    mg: "mg", g: "g", kg: "kg", oz: "オンス", lb: "ポンド"
+  };
+
+  var weightInput = document.getElementById("weight-input");
+  var weightFrom = document.getElementById("weight-from");
+  var weightTo = document.getElementById("weight-to");
+  var weightError = document.getElementById("weight-error");
+  var weightResult = document.getElementById("weight-result");
+
+  function calcWeight() {
+    var parsed = parseNumberInput(weightInput.value);
+    if (!parsed.ok) {
+      if (weightInput.value.trim() === "") {
+        clearError(weightError);
+        weightResult.textContent = "結果がここに表示されます";
+        return;
+      }
+      showError(weightError, weightResult, parsed.message);
+      return;
+    }
+    clearError(weightError);
+    var g = parsed.value * weightToG[weightFrom.value];
+    var result = g / weightToG[weightTo.value];
+    weightResult.textContent = parsed.value + " " + weightLabels[weightFrom.value] + " = " + formatNumber(result) + " " + weightLabels[weightTo.value];
+  }
+
+  [weightInput, weightFrom, weightTo].forEach(function (el) {
+    el.addEventListener("input", calcWeight);
+  });
+
+  document.querySelector('[data-swap="weight"]').addEventListener("click", function () {
+    var tmp = weightFrom.value;
+    weightFrom.value = weightTo.value;
+    weightTo.value = tmp;
+    calcWeight();
+  });
+
+  // ---- 材料換算 (体積 <-> 重量) ----
+  var densityGPerMl = {
+    water: 1.0,
+    flour: 0.55,
+    sugar: 0.65,
+    salt: 0.9,
+    butter: 0.9,
+    rice: 150 / 180
+  };
+
+  var ingSelect = document.getElementById("ing-select");
+  var ingInput = document.getElementById("ing-input");
+  var ingFrom = document.getElementById("ing-from");
+  var ingTo = document.getElementById("ing-to");
+  var ingError = document.getElementById("ing-error");
+  var ingResult = document.getElementById("ing-result");
+
+  function ingUnitToMlAndG(unit, value, density) {
+    // 戻り値: { ml, g }
+    if (unit === "g") {
+      var ml = value / density;
+      return { ml: ml, g: value };
+    }
+    var mlValue = value * volumeToMl[unit];
+    return { ml: mlValue, g: mlValue * density };
+  }
+
+  function calcIngredient() {
+    var parsed = parseNumberInput(ingInput.value);
+    if (!parsed.ok) {
+      if (ingInput.value.trim() === "") {
+        clearError(ingError);
+        ingResult.textContent = "結果がここに表示されます";
+        return;
+      }
+      showError(ingError, ingResult, parsed.message);
+      return;
+    }
+    if (ingFrom.value === ingTo.value) {
+      clearError(ingError);
+      ingResult.textContent = parsed.value + " → 同じ単位のため変換の必要はありません。";
+      return;
+    }
+    clearError(ingError);
+    var density = densityGPerMl[ingSelect.value];
+    var base = ingUnitToMlAndG(ingFrom.value, parsed.value, density);
+
+    var resultValue;
+    var toLabel;
+    if (ingTo.value === "g") {
+      resultValue = base.g;
+      toLabel = "g";
+    } else {
+      resultValue = base.ml / volumeToMl[ingTo.value];
+      toLabel = volumeLabels[ingTo.value];
+    }
+
+    var fromLabel = ingFrom.value === "g" ? "g" : volumeLabels[ingFrom.value];
+    ingResult.textContent = parsed.value + " " + fromLabel + " = " + formatNumber(resultValue) + " " + toLabel;
+  }
+
+  [ingInput, ingFrom, ingTo, ingSelect].forEach(function (el) {
+    el.addEventListener("input", calcIngredient);
+    el.addEventListener("change", calcIngredient);
+  });
+})();
+</script>
+</body>
+</html>

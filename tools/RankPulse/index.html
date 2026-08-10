@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RankPulse | 検索順位の変動を毎日チェック</title>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --border: #dde3ea;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --up: #16a34a;
+    --down: #dc2626;
+    --flat: #6b7280;
+    --danger-bg: #fef2f2;
+    --danger-text: #b91c1c;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 20px 16px 40px;
+  }
+
+  header.hero {
+    text-align: center;
+    padding: 24px 12px 8px;
+  }
+
+  header.hero h1 {
+    margin: 0 0 8px;
+    font-size: 1.8rem;
+    color: var(--primary-dark);
+    letter-spacing: 0.02em;
+  }
+
+  header.hero p {
+    margin: 0 auto;
+    max-width: 560px;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-top: 16px;
+  }
+
+  .card h2 {
+    margin: 0 0 12px;
+    font-size: 1.05rem;
+  }
+
+  .field {
+    margin-bottom: 12px;
+  }
+
+  .field label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--text);
+  }
+
+  .field input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    background: #fff;
+    color: var(--text);
+  }
+
+  .field input[type="text"]:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+  }
+
+  .form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .form-row .field {
+    flex: 1 1 220px;
+    min-width: 0;
+  }
+
+  button {
+    cursor: pointer;
+    font-size: 0.92rem;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-weight: 600;
+    transition: background 0.15s ease;
+  }
+
+  .btn-primary {
+    background: var(--primary);
+    color: #fff;
+  }
+
+  .btn-primary:hover { background: var(--primary-dark); }
+
+  .btn-secondary {
+    background: #eef2ff;
+    color: var(--primary-dark);
+  }
+
+  .btn-secondary:hover { background: #e0e7ff; }
+
+  .btn-check {
+    width: 100%;
+    padding: 13px;
+    font-size: 1rem;
+  }
+
+  .btn-danger-outline {
+    background: #fff;
+    color: var(--down);
+    border: 1px solid #fca5a5;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+
+  .error-box {
+    display: none;
+    background: var(--danger-bg);
+    color: var(--danger-text);
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    margin-top: 8px;
+  }
+
+  .error-box.show { display: block; }
+
+  .options-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  .status-line {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-top: 10px;
+    text-align: center;
+  }
+
+  .notice-banner {
+    display: none;
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-top: 16px;
+    font-size: 0.88rem;
+    border: 1px solid;
+  }
+
+  .notice-banner.show { display: block; }
+
+  .notice-banner.info {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1e40af;
+  }
+
+  .notice-banner.empty {
+    background: #f9fafb;
+    border-color: var(--border);
+    color: var(--muted);
+  }
+
+  .keyword-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .kw-item {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+  }
+
+  .kw-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .kw-meta {
+    min-width: 0;
+  }
+
+  .kw-keyword {
+    font-weight: 700;
+    font-size: 0.98rem;
+    word-break: break-word;
+  }
+
+  .kw-url {
+    font-size: 0.78rem;
+    color: var(--muted);
+    word-break: break-all;
+  }
+
+  .kw-rank-block {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    white-space: nowrap;
+  }
+
+  .kw-rank {
+    font-size: 1.4rem;
+    font-weight: 800;
+  }
+
+  .kw-diff {
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .diff-up { color: var(--up); background: #ecfdf3; }
+  .diff-down { color: var(--down); background: #fef2f2; }
+  .diff-flat { color: var(--flat); background: #f3f4f6; }
+  .diff-new { color: var(--primary-dark); background: #eef2ff; }
+
+  .kw-history {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+
+  .kw-history span {
+    background: #f3f4f6;
+    border-radius: 6px;
+    padding: 2px 6px;
+  }
+
+  .kw-actions {
+    margin-top: 10px;
+    text-align: right;
+  }
+
+  .empty-state {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.88rem;
+    padding: 20px 8px;
+  }
+
+  footer {
+    margin-top: 32px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--muted);
+    padding-bottom: 10px;
+  }
+
+  footer a {
+    color: var(--primary);
+    text-decoration: none;
+  }
+
+  footer a:hover { text-decoration: underline; }
+
+  @media (max-width: 400px) {
+    header.hero h1 { font-size: 1.5rem; }
+    .card { padding: 14px; }
+    .kw-rank { font-size: 1.2rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>RankPulse</h1>
+    <p>自社サイトのURLとキーワードを登録し「今すぐ順位をチェック」を押すと、検索順位を記録して前回からの変動を通知します。1日1回チェックすると日々の順位推移を追跡できます。</p>
+  </header>
+
+  <section class="card" aria-labelledby="add-heading">
+    <h2 id="add-heading">監視キーワードを追加</h2>
+    <div class="form-row">
+      <div class="field">
+        <label for="site-url">サイトURL</label>
+        <input type="text" id="site-url" placeholder="https://example.com" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="keyword">検索キーワード</label>
+        <input type="text" id="keyword" placeholder="例: SEO 順位 チェック" autocomplete="off">
+      </div>
+    </div>
+    <button type="button" class="btn-primary" id="add-btn">追加する</button>
+    <div class="error-box" id="form-error"></div>
+  </section>
+
+  <section class="card">
+    <h2>順位チェック</h2>
+    <button type="button" class="btn-primary btn-check" id="check-btn">今すぐ順位をチェック</button>
+    <div class="options-row">
+      <input type="checkbox" id="notify-toggle">
+      <label for="notify-toggle">大きな変動（±3位以上）をブラウザ通知で知らせる</label>
+    </div>
+    <div class="status-line" id="last-checked">まだチェックしていません</div>
+    <div class="notice-banner" id="notice-banner"></div>
+  </section>
+
+  <section class="card">
+    <h2>監視中のキーワード</h2>
+    <div class="keyword-list" id="keyword-list"></div>
+    <div class="empty-state" id="empty-state">まだキーワードが登録されていません。上のフォームから追加してください。</div>
+  </section>
+
+</div>
+
+<footer>
+  <!-- TODO: noteの記事URLをここに設定する -->
+  <a href="#" id="note-link">このツールの作り方はnoteで公開中</a>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var STORAGE_KEY = 'rankpulse_items_v1';
+  var MAX_ITEMS = 20;
+  var MAX_HISTORY = 14;
+  var NOTIFY_KEY = 'rankpulse_notify_v1';
+
+  var els = {
+    siteUrl: document.getElementById('site-url'),
+    keyword: document.getElementById('keyword'),
+    addBtn: document.getElementById('add-btn'),
+    formError: document.getElementById('form-error'),
+    checkBtn: document.getElementById('check-btn'),
+    lastChecked: document.getElementById('last-checked'),
+    noticeBanner: document.getElementById('notice-banner'),
+    keywordList: document.getElementById('keyword-list'),
+    emptyState: document.getElementById('empty-state'),
+    notifyToggle: document.getElementById('notify-toggle')
+  };
+
+  function loadItems() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveItems(items) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  }
+
+  function todayStr() {
+    var d = new Date();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + m + '-' + day;
+  }
+
+  function normalizeUrl(value) {
+    var v = value.trim();
+    if (!/^https?:\/\//i.test(v)) {
+      v = 'https://' + v;
+    }
+    return v;
+  }
+
+  function isValidUrl(value) {
+    try {
+      var u = new URL(normalizeUrl(value));
+      return /\./.test(u.hostname) && u.hostname.length > 3;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // djb2 hash -> deterministic integer seed from a string
+  function hashString(str) {
+    var hash = 5381;
+    for (var i = 0; i < str.length; i++) {
+      hash = ((hash << 5) + hash) + str.charCodeAt(i);
+      hash = hash | 0;
+    }
+    return hash >>> 0;
+  }
+
+  // mulberry32 seeded PRNG
+  function mulberry32(seed) {
+    var a = seed;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function initialRank(url, keyword) {
+    var seed = hashString(url + '::' + keyword + '::init');
+    var rnd = mulberry32(seed);
+    return 1 + Math.floor(rnd() * 100);
+  }
+
+  function nextRank(url, keyword, dateStr, prevRank) {
+    var seed = hashString(url + '::' + keyword + '::' + dateStr);
+    var rnd = mulberry32(seed);
+    var delta = Math.floor(rnd() * 11) - 5; // -5 .. +5
+    var next = prevRank + delta;
+    if (next < 1) next = 1;
+    if (next > 100) next = 100;
+    return next;
+  }
+
+  function showFormError(msg) {
+    els.formError.textContent = msg;
+    els.formError.classList.add('show');
+  }
+
+  function clearFormError() {
+    els.formError.textContent = '';
+    els.formError.classList.remove('show');
+  }
+
+  function showBanner(text, type) {
+    els.noticeBanner.textContent = text;
+    els.noticeBanner.className = 'notice-banner show ' + type;
+  }
+
+  function hideBanner() {
+    els.noticeBanner.className = 'notice-banner';
+    els.noticeBanner.textContent = '';
+  }
+
+  function addItem() {
+    clearFormError();
+    var urlRaw = els.siteUrl.value;
+    var kwRaw = els.keyword.value;
+
+    if (!urlRaw.trim()) {
+      showFormError('サイトURLを入力してください。');
+      return;
+    }
+    if (!isValidUrl(urlRaw)) {
+      showFormError('サイトURLの形式が正しくありません（例: https://example.com）。');
+      return;
+    }
+    if (!kwRaw.trim()) {
+      showFormError('検索キーワードを入力してください。');
+      return;
+    }
+    if (kwRaw.trim().length > 50) {
+      showFormError('検索キーワードは50文字以内で入力してください。');
+      return;
+    }
+
+    var url = normalizeUrl(urlRaw);
+    var keyword = kwRaw.trim();
+    var items = loadItems();
+
+    if (items.length >= MAX_ITEMS) {
+      showFormError('登録できるキーワードは最大' + MAX_ITEMS + '件までです。');
+      return;
+    }
+
+    var dup = items.some(function (it) {
+      return it.url.toLowerCase() === url.toLowerCase() && it.keyword.toLowerCase() === keyword.toLowerCase();
+    });
+    if (dup) {
+      showFormError('同じURLとキーワードの組み合わせはすでに登録されています。');
+      return;
+    }
+
+    var rank = initialRank(url, keyword);
+    items.push({
+      id: Date.now() + '-' + Math.floor(Math.random() * 1000),
+      url: url,
+      keyword: keyword,
+      history: [{ date: todayStr(), rank: rank }]
+    });
+    saveItems(items);
+
+    els.siteUrl.value = '';
+    els.keyword.value = '';
+    render();
+  }
+
+  function runCheck() {
+    var items = loadItems();
+    if (items.length === 0) {
+      showBanner('監視中のキーワードがありません。まずキーワードを追加してください。', 'empty');
+      return;
+    }
+
+    var today = todayStr();
+    var changes = [];
+
+    items.forEach(function (it) {
+      var last = it.history[it.history.length - 1];
+      if (last.date === today) {
+        return; // already checked today, keep idempotent
+      }
+      var newRank = nextRank(it.url, it.keyword, today, last.rank);
+      it.history.push({ date: today, rank: newRank });
+      if (it.history.length > MAX_HISTORY) {
+        it.history = it.history.slice(it.history.length - MAX_HISTORY);
+      }
+      var diff = last.rank - newRank; // positive = improved (rank number went down)
+      if (diff !== 0) {
+        changes.push({ keyword: it.keyword, url: it.url, diff: diff, rank: newRank });
+      }
+    });
+
+    saveItems(items);
+    localStorage.setItem('rankpulse_last_check', today);
+    els.lastChecked.textContent = '最終チェック: ' + today;
+
+    if (changes.length === 0) {
+      showBanner('本日はすでにチェック済み、または順位に変動はありませんでした。', 'info');
+    } else {
+      var summary = changes.length + '件のキーワードで順位が変動しました。';
+      showBanner(summary, 'info');
+      maybeNotify(changes);
+    }
+
+    render();
+  }
+
+  function maybeNotify(changes) {
+    if (!els.notifyToggle.checked) return;
+    if (typeof Notification === 'undefined') return;
+
+    var big = changes.filter(function (c) { return Math.abs(c.diff) >= 3; });
+    if (big.length === 0) return;
+
+    function fire() {
+      big.forEach(function (c) {
+        var dir = c.diff > 0 ? '上昇' : '下降';
+        new Notification('RankPulse 順位変動通知', {
+          body: c.keyword + ' が ' + Math.abs(c.diff) + '位' + dir + '（現在 ' + c.rank + '位）'
+        });
+      });
+    }
+
+    if (Notification.permission === 'granted') {
+      fire();
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission().then(function (perm) {
+        if (perm === 'granted') fire();
+      });
+    }
+  }
+
+  function removeItem(id) {
+    var items = loadItems().filter(function (it) { return it.id !== id; });
+    saveItems(items);
+    render();
+  }
+
+  function formatDiff(diff) {
+    if (diff === null) {
+      return { text: 'NEW', cls: 'diff-new' };
+    }
+    if (diff > 0) {
+      return { text: '▲ ' + diff, cls: 'diff-up' };
+    }
+    if (diff < 0) {
+      return { text: '▼ ' + Math.abs(diff), cls: 'diff-down' };
+    }
+    return { text: '→ 0', cls: 'diff-flat' };
+  }
+
+  function render() {
+    var items = loadItems();
+    els.keywordList.innerHTML = '';
+    els.emptyState.style.display = items.length === 0 ? 'block' : 'none';
+
+    var lastCheck = localStorage.getItem('rankpulse_last_check');
+    els.lastChecked.textContent = lastCheck ? ('最終チェック: ' + lastCheck) : 'まだチェックしていません';
+
+    items.forEach(function (it) {
+      var history = it.history;
+      var current = history[history.length - 1];
+      var prev = history.length > 1 ? history[history.length - 2] : null;
+      var diff = prev ? (prev.rank - current.rank) : null;
+      var diffInfo = formatDiff(diff);
+
+      var card = document.createElement('div');
+      card.className = 'kw-item';
+
+      var top = document.createElement('div');
+      top.className = 'kw-top';
+
+      var meta = document.createElement('div');
+      meta.className = 'kw-meta';
+      var kwEl = document.createElement('div');
+      kwEl.className = 'kw-keyword';
+      kwEl.textContent = it.keyword;
+      var urlEl = document.createElement('div');
+      urlEl.className = 'kw-url';
+      urlEl.textContent = it.url;
+      meta.appendChild(kwEl);
+      meta.appendChild(urlEl);
+
+      var rankBlock = document.createElement('div');
+      rankBlock.className = 'kw-rank-block';
+      var rankEl = document.createElement('div');
+      rankEl.className = 'kw-rank';
+      rankEl.textContent = current.rank + '位';
+      var diffEl = document.createElement('div');
+      diffEl.className = 'kw-diff ' + diffInfo.cls;
+      diffEl.textContent = diffInfo.text;
+      rankBlock.appendChild(rankEl);
+      rankBlock.appendChild(diffEl);
+
+      top.appendChild(meta);
+      top.appendChild(rankBlock);
+      card.appendChild(top);
+
+      var histEl = document.createElement('div');
+      histEl.className = 'kw-history';
+      history.slice(-7).forEach(function (h) {
+        var span = document.createElement('span');
+        span.textContent = h.date.slice(5) + ': ' + h.rank + '位';
+        histEl.appendChild(span);
+      });
+      card.appendChild(histEl);
+
+      var actions = document.createElement('div');
+      actions.className = 'kw-actions';
+      var delBtn = document.createElement('button');
+      delBtn.className = 'btn-danger-outline';
+      delBtn.textContent = '削除';
+      delBtn.addEventListener('click', function () { removeItem(it.id); });
+      actions.appendChild(delBtn);
+      card.appendChild(actions);
+
+      els.keywordList.appendChild(card);
+    });
+  }
+
+  els.addBtn.addEventListener('click', addItem);
+  els.keyword.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') addItem();
+  });
+  els.siteUrl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') addItem();
+  });
+  els.checkBtn.addEventListener('click', runCheck);
+
+  var notifyPref = localStorage.getItem(NOTIFY_KEY);
+  els.notifyToggle.checked = notifyPref === '1';
+  els.notifyToggle.addEventListener('change', function () {
+    localStorage.setItem(NOTIFY_KEY, els.notifyToggle.checked ? '1' : '0');
+  });
+
+  hideBanner();
+  render();
+})();
+</script>
+</body>
+</html>
