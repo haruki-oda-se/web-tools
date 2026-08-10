@@ -155,13 +155,20 @@ function render() {
 
 function card(e, isDone) {
   const q = encodeURIComponent(e.key.slice(0, 40));
+  const isNone = e.url.toUpperCase() === "NONE";
   return `<div class="card ${isDone ? "done" : "pending"}">
-    <p class="pname">${esc(e.key)}</p>
+    <p class="pname">${esc(e.key)}${isNone ? ' <span style="color:#6b645a;font-size:12px;">(Amazon出品なし)</span>' : ""}</p>
     <div class="row">
       <input type="url" data-key="${esc(e.key)}" value="${esc(e.url)}" placeholder="AmazonのリンクURLを貼り付け" inputmode="url">
       <a class="amz" href="https://www.amazon.co.jp/s?k=${q}" target="_blank" rel="noopener">Amazonで探す</a>
+      <button class="ghost" onclick="markNone(this)" title="Amazonに出品がない商品として記録(記事にAmazonボタンを表示しない)">出品なし</button>
     </div>
   </div>`;
+}
+
+function markNone(btn) {
+  const inp = btn.parentElement.querySelector("input[data-key]");
+  inp.value = inp.value.toUpperCase() === "NONE" ? "" : "NONE";
 }
 
 function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
