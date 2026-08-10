@@ -61,13 +61,33 @@
   #setup { padding: 20px 16px; max-width: 480px; margin: 0 auto; }
   #setup ol { padding-left: 20px; }
   .empty { text-align: center; padding: 40px 0; color: #6b645a; }
+  .tabs { display:flex; gap:8px; padding: 0 16px 14px; border-bottom: 1px solid var(--line); }
+  .tab { padding:8px 16px; border-radius:7px; font-size:14px; font-weight:600; border:1px solid var(--line);
+         background:transparent; cursor:pointer; color:var(--ink); }
+  .tab.active { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .section { display:none; }
+  .section.active { display:block; }
+  .acard { background:#fff; border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+  .acard.waiting { border-left:4px solid var(--accent); }
+  .acard.done { border-left:4px solid var(--done); }
+  .ameta { font-size:12px; color:#6b645a; margin:2px 0 8px; }
+  .aurl { display:flex; gap:8px; margin-top:6px; }
+  .aurl input { flex:1; min-width:0; padding:8px 10px; font-size:14px;
+    border:1px solid var(--line); border-radius:7px; background:var(--paper); }
+  button.save-url { padding:8px 14px; border-radius:7px; font-size:13px; font-weight:600;
+    border:none; cursor:pointer; background:var(--accent); color:#fff; white-space:nowrap; }
+  .asaved { font-size:12px; color:var(--done); margin-top:4px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>🛒 リンク帳</h1>
+  <h1>📋 工場管理アプリ</h1>
   <span class="count" id="count"></span>
 </header>
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('link')">🛒 リンク帳</button>
+  <button class="tab" onclick="switchTab('article')">📝 記事管理</button>
+</div>
 
 <div id="setup" hidden>
   <p><strong>初回設定:</strong> GitHubのアクセストークンを保存します(この端末のブラウザ内にのみ保存されます)。</p>
@@ -83,7 +103,8 @@
   <p class="status err" id="setupErr"></p>
 </div>
 
-<main id="app" hidden>
+<main>
+<div id="linkSection" class="section active">
   <div id="pendingList"></div>
   <details id="doneWrap"><summary id="doneSummary"></summary><div id="doneList"></div></details>
 </main>
@@ -91,6 +112,15 @@
 <div class="savebar" id="savebar" hidden>
   <button class="primary" onclick="save()">入力した分を保存</button>
   <button class="ghost" onclick="load()">再読込</button>
+</div>
+  <details id="hiddenLinksWrap" style="margin:16px 14px 0;" hidden><summary id="hiddenLinksSummary" style="cursor:pointer;font-weight:600;color:#6b645a;"></summary><div id="hiddenLinksList"></div></details>
+</div><!-- /linkSection -->
+
+<div id="articleSection" class="section">
+  <div id="waitingList" style="padding:0 0 80px;max-width:640px;margin:0 auto;"></div>
+  <div class="savebar" id="articleReload" hidden>
+    <button class="ghost" onclick="loadTracker()">再読込</button>
+  </div>
 </div>
 <p class="status" id="status"></p>
 
@@ -110,6 +140,110 @@ function saveToken() {
   if (!t) { $("setupErr").textContent = "トークンを入力してください"; return; }
   localStorage.setItem("gh_token", t);
   init();
+}
+
+const TRACKER_PATH = "article_tracker.txt";
+const TRACKER_API = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${TRACKER_PATH}`;
+let trackerSha = null;
+let articles = [];
+let currentTab = "link";
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.textContent.includes(tab === "link" ? "リンク帳" : "記事管理")));
+  document.getElementById("linkSection").classList.toggle("active", tab === "link");
+  document.getElementById("articleSection").classList.toggle("active", tab === "article");
+  if (tab === "article") loadTracker();
+}
+
+async function loadTracker() {
+  const list = document.getElementById("waitingList");
+  list.innerHTML = '<p class="status">読み込み中…</p>';
+  try {
+    const res = await fetch(TRACKER_API + "?t=" + Date.now(), {
+      headers: { Authorization: "Bearer " + token(), Accept: "application/vnd.github+json" }, cache: "no-store"
+    });
+    if (!res.ok) { list.innerHTML = '<p class="status err">読み込みエラー (HTTP ' + res.status + ')</p>'; return; }
+    const data = await res.json();
+    trackerSha = data.sha;
+    articles = b64decode(data.content).split("\n").filter(l => l.trim() && !l.startsWith("#"))
+      .map(l => { const p = l.split("|").map(x => x.trim()); return { title:p[0]||"", url:p[1]||"", theme:p[2]||"", date:p[3]||"", type:p[4]||"", hidden:(p[5]||"").toUpperCase()==="HIDDEN" }; })
+      .filter(a => a.title).reverse();
+    renderArticles();
+    document.getElementById("articleReload").hidden = false;
+  } catch(e) { list.innerHTML = '<p class="status err">読み込みに失敗: ' + e.message + '</p>'; }
+}
+
+function renderArticles() {
+  const waiting = articles.filter(a => !a.url && !a.hidden);
+  const done = articles.filter(a => a.url && !a.hidden);
+  const hiddenA = articles.filter(a => a.hidden);
+  const list = document.getElementById("waitingList");
+  let html = "";
+  if (waiting.length === 0) {
+    html += '<div class="empty">URL待ちの記事はありません 🎉<br>工場が記事を生成すると自動で追加されます</div>';
+  } else {
+    html += `<p style="font-size:13px;color:#6b645a;padding:8px 0;">公開URL待ち <b>${waiting.length}</b> 件</p>`;
+    waiting.forEach(a => {
+      html += `<div class="acard waiting">
+        <p class="pname">${esc(a.title)} <button class="ghost" style="font-size:11px;padding:3px 8px;" data-hidetitle="${esc(a.title)}" onclick="hideArticle(this,true)">🙈</button></p>
+        <p class="ameta">${esc(a.type)} | ${esc(a.theme)} | ${esc(a.date)}</p>
+        <div class="aurl">
+          <input type="url" placeholder="記事を公開後にURLを貼り付け" data-title="${esc(a.title)}" inputmode="url">
+          <button class="save-url" onclick="saveUrl(this)">保存</button>
+        </div>
+      </div>`;
+    });
+  }
+  if (done.length > 0) {
+    html += `<details style="margin-top:16px;"><summary style="cursor:pointer;font-weight:600;color:#6b645a;">公開済み ${done.length} 件</summary>`;
+    done.forEach(a => {
+      html += `<div class="acard done" style="margin-top:8px;">
+        <p class="pname">${esc(a.title)}</p>
+        <p class="ameta">${esc(a.type)} | ${esc(a.theme)} | ${esc(a.date)}</p>
+        <p class="asaved"><a href="${esc(a.url)}" target="_blank">${esc(a.url)}</a></p>
+      </div>`;
+    });
+    html += `</details>`;
+  }
+  if (hiddenA.length > 0) {
+    html += `<details style="margin-top:16px;"><summary style="cursor:pointer;font-weight:600;color:#6b645a;">非表示 ${hiddenA.length} 件</summary>`;
+    hiddenA.forEach(a => {
+      html += `<div class="acard" style="margin-top:8px;opacity:0.6;">
+        <p class="pname">${esc(a.title)}</p>
+        <p class="ameta">${esc(a.type)} | ${esc(a.date)}</p>
+        <button class="ghost" style="font-size:12px;padding:4px 10px;margin-top:4px;" data-hidetitle="${esc(a.title)}" onclick="hideArticle(this,false)">表示に戻す</button>
+      </div>`;
+    });
+    html += `</details>`;
+  }
+  list.innerHTML = html;
+}
+
+async function saveUrl(btn) {
+  const inp = btn.previousElementSibling;
+  const url = inp.value.trim();
+  if (!url || !url.startsWith("http")) { inp.style.border="1px solid #b3261e"; return; }
+  inp.style.border="";
+  const af = articles.find(x => x.title === inp.dataset.title);
+  if (!af) return;
+  af.url = url;
+  btn.textContent = "保存中…"; btn.disabled = true;
+  const text = "# タイトル | URL | テーマ | 生成日 | 種別 | 非表示\n"
+    + [...articles].reverse().map(a => `${a.title} | ${a.url} | ${a.theme} | ${a.date} | ${a.type} | ${a.hidden ? "HIDDEN" : ""}`).join("\n") + "\n";
+  try {
+    const res = await fetch(TRACKER_API, {
+      method: "PUT",
+      headers: { Authorization: "Bearer " + token(), Accept: "application/vnd.github+json" },
+      body: JSON.stringify({ message: "update: article url (" + articles[idx].title.slice(0,30) + ")", content: b64encode(text), sha: trackerSha })
+    });
+    if (res.ok) {
+      const d = await res.json(); trackerSha = d.content.sha;
+      btn.textContent = "✅ 保存"; setTimeout(() => renderArticles(), 500);
+    } else {
+      btn.textContent = "❌ 失敗"; btn.disabled = false;
+    }
+  } catch(e) { btn.textContent = "❌ エラー"; btn.disabled = false; }
 }
 
 function b64decode(s) { return decodeURIComponent(escape(atob(s.replace(/\n/g, "")))); }
@@ -156,7 +290,7 @@ async function load() {
     .map(l => l.trim()).filter(l => l && !l.startsWith("#"))
     .map(l => {
       const p = l.split("|");
-      return { key: (p[0] || "").trim(), url: (p[1] || "").trim(), term: (p[2] || "").trim() };
+      return { key: (p[0] || "").trim(), url: (p[1] || "").trim(), term: (p[2] || "").trim(), hidden: (p[3] || "").trim().toUpperCase() === "HIDDEN" };
     })
     .filter(e => e.key);
   render();
@@ -164,14 +298,23 @@ async function load() {
 }
 
 function render() {
-  const pending = entries.filter(e => !e.url);
-  const done = entries.filter(e => e.url);
+  const pending = entries.filter(e => !e.url && !e.hidden);
+  const done = entries.filter(e => e.url && !e.hidden);
+  const hiddenE = entries.filter(e => e.hidden);
   $("count").textContent = `入力待ち ${pending.length} / 登録済み ${done.length}`;
   $("pendingList").innerHTML = pending.length ? pending.map(e => card(e, false)).join("")
     : `<div class="empty">入力待ちはありません 🎉<br>次の選定(毎朝4:00)をお待ちください</div>`;
   $("doneSummary").textContent = `登録済み ${done.length} 件を表示`;
   $("doneList").innerHTML = done.map(e => card(e, true)).join("");
   $("savebar").hidden = pending.length === 0;
+  const hw = $("hiddenLinksWrap");
+  hw.hidden = hiddenE.length === 0;
+  $("hiddenLinksSummary").textContent = `非表示 ${hiddenE.length} 件`;
+  $("hiddenLinksList").innerHTML = hiddenE.map(e => `
+    <div class="card" style="margin-top:8px;opacity:0.6;">
+      <p class="pname">${esc(e.key)}</p>
+      <button class="ghost" style="font-size:12px;padding:4px 10px;margin-top:4px;" data-hidekey="${esc(e.key)}" onclick="hideLink(this,false)">表示に戻す</button>
+    </div>`).join("");
 }
 
 function cleanKey(k) {
@@ -196,6 +339,7 @@ function card(e, isDone) {
       <a class="amz" href="https://www.amazon.co.jp/s?k=${q}" target="_blank" rel="noopener">Amazonで探す</a>
       <button class="ghost" onclick="copyKey(this)" data-ck="${esc(ck)}">📋 検索語コピー</button>
       <button class="ghost" onclick="markNone(this)" title="記事にAmazonボタンを表示しない">出品なし</button>
+      <button class="ghost" style="font-size:12px;padding:4px 8px;" data-hidekey="${esc(e.key)}" onclick="hideLink(this,true)" title="非表示にする">🙈</button>
     </div>
   </div>`;
 }
@@ -207,9 +351,45 @@ function copyKey(btn) {
   });
 }
 
+async function hideLink(btn, hide) {
+  const key = btn.dataset.hidekey;
+  const e = entries.find(x => x.key === key);
+  if (!e) return;
+  document.querySelectorAll("input[data-key]").forEach(inp => {
+    const en = entries.find(x => x.key === inp.dataset.key);
+    if (en) en.url = inp.value.trim();
+  });
+  e.hidden = hide;
+  const text = "# 商品名キー | AmazonリンクURL | 検索語 | 非表示\n"
+    + entries.map(x => `${x.key} | ${x.url} | ${x.term || ""} | ${x.hidden ? "HIDDEN" : ""}`).join("\n") + "\n";
+  $("status").textContent = hide ? "非表示にしています…" : "表示に戻しています…";
+  const res = await fetch(API, {
+    method: "PUT",
+    headers: { Authorization: "Bearer " + token(), Accept: "application/vnd.github+json" },
+    body: JSON.stringify({ message: `update: ${hide?"hide":"unhide"} link`, content: b64encode(text), sha })
+  });
+  if (res.ok) { const d = await res.json(); sha = d.content.sha; $("status").textContent = ""; render(); }
+  else { $("status").textContent = "保存に失敗しました"; $("status").className = "status err"; }
+}
+
 function markNone(btn) {
   const inp = btn.closest(".card").querySelector("input[data-key]");
   inp.value = inp.value.toUpperCase() === "NONE" ? "" : "NONE";
+}
+
+async function hideArticle(btn, hide) {
+  const title = btn.dataset.hidetitle;
+  const a = articles.find(x => x.title === title);
+  if (!a) return;
+  a.hidden = hide;
+  const text = "# タイトル | URL | テーマ | 生成日 | 種別 | 非表示\n"
+    + [...articles].reverse().map(x => `${x.title} | ${x.url} | ${x.theme} | ${x.date} | ${x.type} | ${x.hidden ? "HIDDEN" : ""}`).join("\n") + "\n";
+  const res = await fetch(TRACKER_API, {
+    method: "PUT",
+    headers: { Authorization: "Bearer " + token(), Accept: "application/vnd.github+json" },
+    body: JSON.stringify({ message: `update: ${hide?"hide":"unhide"} article`, content: b64encode(text), sha: trackerSha })
+  });
+  if (res.ok) { const d = await res.json(); trackerSha = d.content.sha; renderArticles(); }
 }
 
 function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
@@ -219,8 +399,8 @@ async function save() {
     const e = entries.find(x => x.key === inp.dataset.key);
     if (e) e.url = inp.value.trim();
   });
-  const text = "# 商品名キー | AmazonリンクURL | 検索語(キーと検索語は編集しない)\n"
-    + entries.map(e => `${e.key} | ${e.url} | ${e.term || ""}`).join("\n") + "\n";
+  const text = "# 商品名キー | AmazonリンクURL | 検索語 | 非表示\n"
+    + entries.map(e => `${e.key} | ${e.url} | ${e.term || ""} | ${e.hidden ? "HIDDEN" : ""}`).join("\n") + "\n";
   $("status").textContent = "保存中…";
   const res = await fetch(API, {
     method: "PUT",
