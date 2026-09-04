@@ -86,7 +86,8 @@
 </header>
 <div class="tabs">
   <button class="tab active" onclick="switchTab('link')">🛒 リンク帳</button>
-  <button class="tab" onclick="switchTab('article')">📝 記事管理</button>
+  <button class="tab" onclick="switchTab('single')">📝 単品記事</button>
+  <button class="tab" onclick="switchTab('article')">📄 記事管理</button>
 </div>
 
 <div id="setup" hidden>
@@ -115,6 +116,10 @@
 </div>
   <details id="hiddenLinksWrap" style="margin:16px 14px 0;" hidden><summary id="hiddenLinksSummary" style="cursor:pointer;font-weight:600;color:#6b645a;"></summary><div id="hiddenLinksList"></div></details>
 </div><!-- /linkSection -->
+
+<div id="singleSection" class="section">
+  <div id="singleWrap" style="padding:0 0 80px;max-width:640px;margin:0 auto;"></div>
+</div>
 
 <div id="articleSection" class="section">
   <div id="waitingList" style="padding:0 0 80px;max-width:640px;margin:0 auto;"></div>
@@ -150,10 +155,13 @@ let currentTab = "link";
 
 function switchTab(tab) {
   currentTab = tab;
-  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.textContent.includes(tab === "link" ? "リンク帳" : "記事管理")));
+  const label = tab === "link" ? "リンク帳" : (tab === "single" ? "単品記事" : "記事管理");
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.textContent.includes(label)));
   document.getElementById("linkSection").classList.toggle("active", tab === "link");
+  document.getElementById("singleSection").classList.toggle("active", tab === "single");
   document.getElementById("articleSection").classList.toggle("active", tab === "article");
   if (tab === "article") loadTracker();
+  if (tab === "single") render();
 }
 
 async function loadTracker() {
@@ -290,7 +298,8 @@ async function load() {
     .map(l => l.trim()).filter(l => l && !l.startsWith("#"))
     .map(l => {
       const p = l.split("|");
-      return { key: (p[0] || "").trim(), url: (p[1] || "").trim(), term: (p[2] || "").trim(), hidden: (p[3] || "").trim().toUpperCase() === "HIDDEN" };
+      const st = (p[3] || "").trim().toUpperCase();
+      return { key: (p[0] || "").trim(), url: (p[1] || "").trim(), term: (p[2] || "").trim(), status: st, hidden: st === "HIDDEN" };
     })
     .filter(e => e.key);
   render();
@@ -298,8 +307,10 @@ async function load() {
 }
 
 function render() {
-  const pending = entries.filter(e => !e.url && !e.hidden);
-  const done = entries.filter(e => e.url && !e.hidden);
+  const pending = entries.filter(e => !e.url && !e.hidden && e.status !== "DONE");
+  const done = entries.filter(e => e.url && !e.hidden && e.status !== "SINGLE" && e.status !== "DONE");
+  const singleQ = entries.filter(e => e.status === "SINGLE");
+  const singleDone = entries.filter(e => e.status === "DONE");
   const hiddenE = entries.filter(e => e.hidden);
   $("count").textContent = `入力待ち ${pending.length} / 登録済み ${done.length}`;
   $("pendingList").innerHTML = pending.length ? pending.map(e => card(e, false)).join("")
@@ -315,6 +326,45 @@ function render() {
       <p class="pname">${esc(e.key)}</p>
       <button class="ghost" style="font-size:12px;padding:4px 10px;margin-top:4px;" data-hidekey="${esc(e.key)}" onclick="hideLink(this,false)">表示に戻す</button>
     </div>`).join("");
+
+  // 単品記事セクション
+  const sw = $("singleWrap");
+  if (sw) {
+    let html = `<p style="font-size:13px;color:#6b645a;padding:8px 0;">単品記事の候補 <b>${singleQ.length}</b> 件</p>`;
+    html += singleQ.length ? singleQ.map(e => `
+      <div class="card" style="border-left:4px solid var(--accent);">
+        <p class="pname">${esc(e.key)}</p>
+        <button class="ghost" style="font-size:12px;padding:4px 10px;" data-skey="${esc(e.key)}" onclick="setSingle(this,'')">候補から外す</button>
+      </div>`).join("")
+      : `<div class="empty" style="padding:20px 0;">候補がありません<br>下の「登録済み」から選んでください</div>`;
+    if (singleDone.length > 0) {
+      html += `<details style="margin-top:16px;"><summary style="cursor:pointer;font-weight:600;color:#6b645a;">生成済み ${singleDone.length} 件</summary>`;
+      html += singleDone.map(e => `
+        <div class="card" style="margin-top:8px;opacity:0.6;">
+          <p class="pname">${esc(e.key)}</p>
+          <button class="ghost" style="font-size:12px;padding:4px 10px;" data-skey="${esc(e.key)}" onclick="setSingle(this,'SINGLE')">再度候補にする</button>
+        </div>`).join("");
+      html += `</details>`;
+    }
+    sw.innerHTML = html;
+  }
+}
+
+async function setSingle(btn, newStatus) {
+  const key = btn.dataset.skey;
+  const e = entries.find(x => x.key === key);
+  if (!e) return;
+  e.status = newStatus;
+  btn.textContent = "保存中…"; btn.disabled = true;
+  const text = "# 商品名キー | AmazonリンクURL | 検索語 | 状態(SINGLE/DONE/HIDDEN)\n"
+    + entries.map(x => `${x.key} | ${x.url} | ${x.term || ""} | ${x.status || ""}`).join("\n") + "\n";
+  const res = await fetch(API, {
+    method: "PUT",
+    headers: { Authorization: "Bearer " + token(), Accept: "application/vnd.github+json" },
+    body: JSON.stringify({ message: "update: single article candidate", content: b64encode(text), sha })
+  });
+  if (res.ok) { const d = await res.json(); sha = d.content.sha; render(); }
+  else { btn.textContent = "❌ 失敗"; btn.disabled = false; }
 }
 
 function cleanKey(k) {
@@ -333,13 +383,14 @@ function card(e, isDone) {
     <p class="pname">${esc(e.key)}${isNone ? ' <span style="color:#6b645a;font-size:12px;">(Amazon出品なし)</span>' : ""}</p>
     ${wmsg ? `<p style="color:#b3261e;font-size:13px;margin:0 0 8px;">⚠️ ${esc(wmsg)}</p>` : ""}
     <div class="row">
-      <input type="url" data-key="${esc(e.key)}" value="${esc(e.url)}" placeholder="Amazonの商品ページURLを貼り付け(SiteStripe不要)" inputmode="url">
+      <input type="url" data-key="${esc(e.key)}" value="${esc(e.url)}" placeholder="商品ページのURLを貼付(短縮URL非推奨)" inputmode="url">
     </div>
     <div class="row" style="margin-top:6px;">
       <a class="amz" href="https://www.amazon.co.jp/s?k=${q}" target="_blank" rel="noopener">Amazonで探す</a>
       <button class="ghost" onclick="copyKey(this)" data-ck="${esc(ck)}">📋 検索語コピー</button>
       <button class="ghost" onclick="markNone(this)" title="記事にAmazonボタンを表示しない">出品なし</button>
       <button class="ghost" style="font-size:12px;padding:4px 8px;" data-hidekey="${esc(e.key)}" onclick="hideLink(this,true)" title="非表示にする">🙈</button>
+      ${isDone ? `<button class="ghost" style="font-size:12px;padding:4px 8px;background:var(--accent);color:#fff;border:none;" data-skey="${esc(e.key)}" onclick="setSingle(this,'SINGLE')" title="単品記事の候補にする">📝 単品化</button>` : ""}
     </div>
   </div>`;
 }
@@ -361,7 +412,7 @@ async function hideLink(btn, hide) {
   });
   e.hidden = hide;
   const text = "# 商品名キー | AmazonリンクURL | 検索語 | 非表示\n"
-    + entries.map(x => `${x.key} | ${x.url} | ${x.term || ""} | ${x.hidden ? "HIDDEN" : ""}`).join("\n") + "\n";
+    + entries.map(x => `${x.key} | ${x.url} | ${x.term || ""} | ${x.status || ""}`).join("\n") + "\n";
   $("status").textContent = hide ? "非表示にしています…" : "表示に戻しています…";
   const res = await fetch(API, {
     method: "PUT",
@@ -395,12 +446,26 @@ async function hideArticle(btn, hide) {
 function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
 
 async function save() {
+  const shortUrls = [];
   document.querySelectorAll("input[data-key]").forEach(inp => {
     const e = entries.find(x => x.key === inp.dataset.key);
-    if (e) e.url = inp.value.trim();
+    if (e) {
+      const v = inp.value.trim();
+      if (/amzn\.(to|asia)/i.test(v)) shortUrls.push(e.key.slice(0, 30));
+      e.url = v;
+    }
   });
+  if (shortUrls.length > 0) {
+    const ok = confirm(
+      "⚠️ 短縮URL(amzn.to / amzn.asia)が含まれています:\n\n" +
+      shortUrls.join("\n") +
+      "\n\n短縮URLはAmazonアプリで「国を選択」エラーになることがあります。\n" +
+      "商品ページのアドレスバーのURL(amazon.co.jp/dp/...)を貼ることを推奨します。\n\nこのまま保存しますか?"
+    );
+    if (!ok) return;
+  }
   const text = "# 商品名キー | AmazonリンクURL | 検索語 | 非表示\n"
-    + entries.map(e => `${e.key} | ${e.url} | ${e.term || ""} | ${e.hidden ? "HIDDEN" : ""}`).join("\n") + "\n";
+    + entries.map(e => `${e.key} | ${e.url} | ${e.term || ""} | ${e.status || ""}`).join("\n") + "\n";
   $("status").textContent = "保存中…";
   const res = await fetch(API, {
     method: "PUT",
