@@ -88,6 +88,7 @@
   <button class="tab active" onclick="switchTab('link')">🛒 リンク帳</button>
   <button class="tab" onclick="switchTab('single')">📝 単品記事</button>
   <button class="tab" onclick="switchTab('article')">📄 記事管理</button>
+  <button class="tab" onclick="switchTab('improve')">🔧 記事改善</button>
 </div>
 
 <div id="setup" hidden>
@@ -119,6 +120,10 @@
 
 <div id="singleSection" class="section">
   <div id="singleWrap" style="padding:0 0 80px;max-width:640px;margin:0 auto;"></div>
+</div>
+
+<div id="improveSection" class="section">
+  <div id="improveWrap" style="padding:0 0 80px;max-width:640px;margin:0 auto;"></div>
 </div>
 
 <div id="articleSection" class="section">
@@ -155,13 +160,15 @@ let currentTab = "link";
 
 function switchTab(tab) {
   currentTab = tab;
-  const label = tab === "link" ? "リンク帳" : (tab === "single" ? "単品記事" : "記事管理");
-  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.textContent.includes(label)));
+  const labels = { link: "リンク帳", single: "単品記事", article: "記事管理", improve: "記事改善" };
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.textContent.includes(labels[tab])));
   document.getElementById("linkSection").classList.toggle("active", tab === "link");
   document.getElementById("singleSection").classList.toggle("active", tab === "single");
   document.getElementById("articleSection").classList.toggle("active", tab === "article");
+  document.getElementById("improveSection").classList.toggle("active", tab === "improve");
   if (tab === "article") loadTracker();
   if (tab === "single") render();
+  if (tab === "improve") loadImprove();
 }
 
 async function loadTracker() {
@@ -511,6 +518,179 @@ async function save() {
     $("status").textContent = "保存に失敗しました (HTTP " + res.status + ")";
     $("status").className = "status err";
   }
+}
+
+// ===== 記事改善タブ =====
+const REQ_PATH = "improve_requests.txt";
+const CAND_PATH = "improve_candidates.txt";
+const EXTRA_C_PATH = "prompt_extra_compare.txt";
+const EXTRA_S_PATH = "prompt_extra_single.txt";
+let reqSha = null, reqLines = [], candLines = [], extraC = [], extraS = [], extraCSha = null, extraSSha = null;
+
+async function ghGet(path) {
+  const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${path}?t=` + Date.now(), {
+    headers: { Authorization: "Bearer " + token(), Accept: "application/vnd.github+json" }, cache: "no-store"
+  });
+  if (!res.ok) return null;
+  const d = await res.json();
+  return { sha: d.sha, text: b64decode(d.content) };
+}
+
+async function ghPut(path, text, sha, msg) {
+  const body = { message: msg, content: b64encode(text) };
+  if (sha) body.sha = sha;
+  const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${path}`, {
+    method: "PUT",
+    headers: { Authorization: "Bearer " + token(), Accept: "application/vnd.github+json" },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) return null;
+  const d = await res.json();
+  return d.content.sha;
+}
+
+async function loadImprove() {
+  const w = $("improveWrap");
+  w.innerHTML = '<p class="status">読み込み中…</p>';
+  const [req, cand, ec, es] = await Promise.all([
+    ghGet(REQ_PATH), ghGet(CAND_PATH), ghGet(EXTRA_C_PATH), ghGet(EXTRA_S_PATH)
+  ]);
+  reqSha = req ? req.sha : null;
+  reqLines = req ? req.text.split("\n").filter(l => l.trim() && !l.startsWith("#")) : [];
+  candLines = cand ? cand.text.split("\n").filter(l => l.trim() && !l.startsWith("#")) : [];
+  extraCSha = ec ? ec.sha : null;
+  extraSSha = es ? es.sha : null;
+  extraC = ec ? ec.text.split("\n").filter(l => l.trim() && !l.startsWith("#")) : [];
+  extraS = es ? es.text.split("\n").filter(l => l.trim() && !l.startsWith("#")) : [];
+  renderImprove();
+}
+
+function renderImprove() {
+  const w = $("improveWrap");
+  const recent = articles.filter(a => !a.hidden).slice(0, 15);
+  let html = "";
+
+  // 新規リクエスト
+  html += `<p style="font-size:13px;color:#6b645a;padding:8px 0;">改善したい記事を選び、気になる点を書いてください</p>`;
+  html += `<div class="card">
+    <select id="impTarget" style="width:100%;padding:9px;border:1px solid var(--line);border-radius:7px;background:var(--paper);margin-bottom:8px;">
+      <option value="">-- 記事を選択 --</option>
+      ${recent.map(a => `<option value="${esc(a.type)}|${esc(a.title)}">[${esc(a.type)}] ${esc(a.title.slice(0,40))}</option>`).join("")}
+    </select>
+    <textarea id="impPoints" placeholder="例: 特徴の説明が抽象的で、具体的な数値や仕様が書かれていない" rows="3"
+      style="width:100%;padding:9px;border:1px solid var(--line);border-radius:7px;background:var(--paper);font-family:inherit;font-size:14px;"></textarea>
+    <button class="save-url" style="margin-top:8px;width:100%;padding:11px;" onclick="submitImprove()">🔧 改善案を作成する</button>
+  </div>`;
+
+  // 処理中・レビュー待ち
+  const pending = reqLines.filter(l => l.includes("PENDING"));
+  const review = reqLines.filter(l => l.includes("REVIEW"));
+  const conflict = reqLines.filter(l => l.includes("CONFLICT"));
+
+  if (pending.length > 0) {
+    html += `<p style="font-size:13px;color:#6b645a;margin-top:20px;">⏳ 改善案の生成待ち ${pending.length}件(次回の定期実行で処理されます)</p>`;
+    pending.forEach(l => {
+      const p = l.split("|").map(x => x.trim());
+      html += `<div class="card" style="opacity:0.7;"><p class="pname">${esc(p[2])}</p><p class="ameta">${esc(p[3])}</p></div>`;
+    });
+  }
+
+  if (review.length > 0) {
+    html += `<p style="font-size:13px;color:#6b645a;margin-top:20px;">📋 採用する案を選んでください ${review.length}件</p>`;
+    review.forEach(l => {
+      const p = l.split("|").map(x => x.trim());
+      const rid = p[0];
+      const cands = candLines.filter(c => c.split("|")[0].trim() === rid);
+      html += `<div class="card" style="border-left:4px solid var(--accent);">
+        <p class="pname">${esc(p[2])}</p>
+        <p class="ameta">指摘: ${esc(p[3])}</p>
+        <p style="font-size:12px;color:#6b645a;margin:8px 0;">はてなの下書き「改善案A/B/C」を読み比べてから選んでください</p>`;
+      cands.forEach(c => {
+        const cp = c.split("|");
+        const tag = cp[1].trim();
+        const inst = cp.slice(2).join("|").trim();
+        html += `<div style="border:1px solid var(--line);border-radius:7px;padding:10px;margin-bottom:8px;">
+          <p style="font-weight:600;margin:0 0 4px;">案${esc(tag)}</p>
+          <p style="font-size:13px;color:#5f5a52;margin:0 0 8px;line-height:1.6;">${esc(inst)}</p>
+          <button class="save-url" style="font-size:12px;padding:6px 12px;" onclick="adoptImprove('${esc(rid)}','${esc(tag)}')">この案を採用</button>
+        </div>`;
+      });
+      html += `<button class="ghost" style="font-size:12px;padding:6px 12px;" onclick="retryImprove('${esc(rid)}')">どれも気に入らない(再生成)</button>
+      </div>`;
+    });
+  }
+
+  if (conflict.length > 0) {
+    html += `<p style="font-size:13px;color:#b3261e;margin-top:20px;">⚠️ 矛盾が検出されました ${conflict.length}件 — 下の既存指示を整理してから再度採用してください</p>`;
+  }
+
+  // 既存の追加指示
+  const showExtra = (title, list, kind) => {
+    const len = list.join("").length;
+    const over = len > 2000;
+    let h = `<details style="margin-top:20px;" ${over ? "open" : ""}>
+      <summary style="cursor:pointer;font-weight:600;color:${over ? "#b3261e" : "#6b645a"};">
+        ${title} ${list.length}件 / ${len}文字${over ? " ⚠️上限超過" : ""}
+      </summary>`;
+    h += list.map((l, i) => `<div class="card" style="margin-top:8px;">
+      <p style="font-size:13px;margin:0 0 8px;line-height:1.6;">${esc(l.replace(/^-\s*/, ""))}</p>
+      <button class="ghost" style="font-size:12px;padding:4px 10px;" onclick="deleteExtra('${kind}',${i})">削除</button>
+    </div>`).join("");
+    return h + `</details>`;
+  };
+  html += showExtra("比較記事の追加指示", extraC, "compare");
+  html += showExtra("単品記事の追加指示", extraS, "single");
+
+  w.innerHTML = html;
+}
+
+async function submitImprove() {
+  const sel = $("impTarget").value;
+  const points = $("impPoints").value.trim();
+  if (!sel || !points) { alert("記事と改善点の両方を入力してください"); return; }
+  const [type, title] = sel.split("|");
+  const kind = type.includes("単品") ? "single" : "compare";
+  const rid = "R" + Date.now().toString().slice(-8);
+  const line = `${rid} | ${kind} | ${title} | ${points.replace(/[|\n]/g, " ")} | PENDING`;
+  const text = "# ID | 種別 | 対象記事 | 改善点 | 状態\n" + reqLines.concat([line]).join("\n") + "\n";
+  const sha = await ghPut(REQ_PATH, text, reqSha, "add: improve request");
+  if (sha) { $("impPoints").value = ""; alert("登録しました。次回の定期実行で改善案が作成されます"); loadImprove(); }
+  else alert("登録に失敗しました");
+}
+
+async function adoptImprove(rid, tag) {
+  const text = "# ID | 種別 | 対象記事 | 改善点 | 状態\n"
+    + reqLines.map(l => l.split("|")[0].trim() === rid ? l.replace(/\|[^|]*$/, `| ADOPT:${tag}`) : l).join("\n") + "\n";
+  const sha = await ghPut(REQ_PATH, text, reqSha, "adopt: " + rid);
+  if (sha) { alert("採用しました。次回の定期実行でプロンプトに反映されます"); loadImprove(); }
+  else alert("失敗しました");
+}
+
+async function retryImprove(rid) {
+  const extra = prompt("どの点が気に入らなかったですか?(この内容を加えて再生成します)");
+  if (!extra) return;
+  const text = "# ID | 種別 | 対象記事 | 改善点 | 状態\n"
+    + reqLines.map(l => {
+        if (l.split("|")[0].trim() !== rid) return l;
+        const p = l.split("|");
+        p[3] = ` ${p[3].trim()} / 追加要望: ${extra.replace(/[|\n]/g, " ")} `;
+        p[p.length-1] = " PENDING";
+        return p.join("|");
+      }).join("\n") + "\n";
+  const sha = await ghPut(REQ_PATH, text, reqSha, "retry: " + rid);
+  if (sha) { alert("再生成をリクエストしました"); loadImprove(); }
+}
+
+async function deleteExtra(kind, idx) {
+  if (!confirm("この指示を削除しますか?")) return;
+  const list = kind === "compare" ? extraC : extraS;
+  const path = kind === "compare" ? EXTRA_C_PATH : EXTRA_S_PATH;
+  const sha = kind === "compare" ? extraCSha : extraSSha;
+  const next = list.filter((_, i) => i !== idx);
+  const text = "# 追加改善指示\n" + next.join("\n") + "\n";
+  const newSha = await ghPut(path, text, sha, "delete: extra instruction");
+  if (newSha) loadImprove();
+  else alert("削除に失敗しました");
 }
 
 function init() {
