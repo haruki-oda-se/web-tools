@@ -299,7 +299,8 @@ async function load() {
     .map(l => {
       const p = l.split("|");
       const st = (p[3] || "").trim().toUpperCase();
-      return { key: (p[0] || "").trim(), url: (p[1] || "").trim(), term: (p[2] || "").trim(), status: st, hidden: st === "HIDDEN" };
+      return { key: (p[0] || "").trim(), url: (p[1] || "").trim(), term: (p[2] || "").trim(), status: st, hidden: st === "HIDDEN",
+               img: (p[4] || "").trim(), info: (p.slice(5).join("|") || "").trim() };
     })
     .filter(e => e.key);
   render();
@@ -330,24 +331,52 @@ function render() {
   // 単品記事セクション
   const sw = $("singleWrap");
   if (sw) {
-    let html = `<p style="font-size:13px;color:#6b645a;padding:8px 0;">単品記事の候補 <b>${singleQ.length}</b> 件</p>`;
-    html += singleQ.length ? singleQ.map(e => `
-      <div class="card" style="border-left:4px solid var(--accent);">
-        <p class="pname">${esc(e.key)}</p>
-        <button class="ghost" style="font-size:12px;padding:4px 10px;" data-skey="${esc(e.key)}" onclick="setSingle(this,'')">候補から外す</button>
-      </div>`).join("")
-      : `<div class="empty" style="padding:20px 0;">候補がありません<br>下の「登録済み」から選んでください</div>`;
+    // リンク登録済み(URLあり・NONEでない)かつ未選択・未生成の商品を選択候補に
+    const selectable = entries.filter(e => {
+      const u = (e.url || "").toUpperCase();
+      return e.url && u !== "NONE" && e.status !== "SINGLE" && e.status !== "DONE" && !e.hidden;
+    });
+    let html = "";
+    if (singleQ.length > 0) {
+      html += `<p style="font-size:13px;color:#6b645a;padding:8px 0;">✅ 記事化する商品 <b>${singleQ.length}</b> 件</p>`;
+      html += singleQ.map(e => prodCard(e, "selected")).join("");
+      html += `<hr style="margin:20px 0;border:none;border-top:1px solid var(--line);">`;
+    }
+    html += `<p style="font-size:13px;color:#6b645a;padding:8px 0;">リンク登録済みの商品 <b>${selectable.length}</b> 件 — 記事化するものを選んでください</p>`;
+    html += selectable.length ? selectable.map(e => prodCard(e, "candidate")).join("")
+      : `<div class="empty" style="padding:20px 0;">選択できる商品がありません<br>先に「🛒 リンク帳」でURLを登録してください</div>`;
     if (singleDone.length > 0) {
-      html += `<details style="margin-top:16px;"><summary style="cursor:pointer;font-weight:600;color:#6b645a;">生成済み ${singleDone.length} 件</summary>`;
-      html += singleDone.map(e => `
-        <div class="card" style="margin-top:8px;opacity:0.6;">
-          <p class="pname">${esc(e.key)}</p>
-          <button class="ghost" style="font-size:12px;padding:4px 10px;" data-skey="${esc(e.key)}" onclick="setSingle(this,'SINGLE')">再度候補にする</button>
-        </div>`).join("");
+      html += `<details style="margin-top:20px;"><summary style="cursor:pointer;font-weight:600;color:#6b645a;">生成済み ${singleDone.length} 件</summary>`;
+      html += singleDone.map(e => prodCard(e, "done")).join("");
       html += `</details>`;
     }
     sw.innerHTML = html;
   }
+}
+
+function prodCard(e, mode) {
+  const imgTag = e.img
+    ? `<img src="${esc(e.img)}" alt="" style="width:80px;height:80px;object-fit:contain;border:1px solid var(--line);border-radius:8px;background:#fff;flex-shrink:0;">`
+    : `<div style="width:80px;height:80px;border:1px solid var(--line);border-radius:8px;background:var(--paper);flex-shrink:0;"></div>`;
+  let btn = "";
+  if (mode === "candidate") {
+    btn = `<button class="save-url" data-skey="${esc(e.key)}" onclick="setSingle(this,'SINGLE')">📝 記事化する</button>`;
+  } else if (mode === "selected") {
+    btn = `<button class="ghost" style="font-size:12px;padding:6px 12px;" data-skey="${esc(e.key)}" onclick="setSingle(this,'')">選択を外す</button>`;
+  } else {
+    btn = `<button class="ghost" style="font-size:12px;padding:6px 12px;" data-skey="${esc(e.key)}" onclick="setSingle(this,'SINGLE')">再度候補にする</button>`;
+  }
+  const border = mode === "selected" ? "border-left:4px solid var(--done);" : (mode === "done" ? "opacity:0.55;" : "");
+  return `<div class="card" style="${border}margin-bottom:10px;">
+    <div style="display:flex;gap:12px;align-items:flex-start;">
+      ${imgTag}
+      <div style="flex:1;min-width:0;">
+        <p class="pname" style="margin:0 0 4px;font-size:14px;">${esc(e.key)}</p>
+        ${e.info ? `<p style="font-size:12px;color:#6b645a;margin:0 0 8px;line-height:1.5;">${esc(e.info.slice(0,110))}</p>` : ""}
+        ${btn}
+      </div>
+    </div>
+  </div>`;
 }
 
 async function setSingle(btn, newStatus) {
@@ -356,8 +385,8 @@ async function setSingle(btn, newStatus) {
   if (!e) return;
   e.status = newStatus;
   btn.textContent = "保存中…"; btn.disabled = true;
-  const text = "# 商品名キー | AmazonリンクURL | 検索語 | 状態(SINGLE/DONE/HIDDEN)\n"
-    + entries.map(x => `${x.key} | ${x.url} | ${x.term || ""} | ${x.status || ""}`).join("\n") + "\n";
+  const text = "# 商品名キー | AmazonリンクURL | 検索語 | 状態 | 画像URL | 商品情報\n"
+    + entries.map(x => `${x.key} | ${x.url} | ${x.term || ""} | ${x.status || ""} | ${x.img || ""} | ${x.info || ""}`).join("\n") + "\n";
   const res = await fetch(API, {
     method: "PUT",
     headers: { Authorization: "Bearer " + token(), Accept: "application/vnd.github+json" },
@@ -411,8 +440,8 @@ async function hideLink(btn, hide) {
     if (en) en.url = inp.value.trim();
   });
   e.hidden = hide;
-  const text = "# 商品名キー | AmazonリンクURL | 検索語 | 非表示\n"
-    + entries.map(x => `${x.key} | ${x.url} | ${x.term || ""} | ${x.status || ""}`).join("\n") + "\n";
+  const text = "# 商品名キー | AmazonリンクURL | 検索語 | 状態 | 画像URL | 商品情報\n"
+    + entries.map(x => `${x.key} | ${x.url} | ${x.term || ""} | ${x.status || ""} | ${x.img || ""} | ${x.info || ""}`).join("\n") + "\n";
   $("status").textContent = hide ? "非表示にしています…" : "表示に戻しています…";
   const res = await fetch(API, {
     method: "PUT",
@@ -464,8 +493,8 @@ async function save() {
     );
     if (!ok) return;
   }
-  const text = "# 商品名キー | AmazonリンクURL | 検索語 | 非表示\n"
-    + entries.map(e => `${e.key} | ${e.url} | ${e.term || ""} | ${e.status || ""}`).join("\n") + "\n";
+  const text = "# 商品名キー | AmazonリンクURL | 検索語 | 状態 | 画像URL | 商品情報\n"
+    + entries.map(e => `${e.key} | ${e.url} | ${e.term || ""} | ${e.status || ""} | ${e.img || ""} | ${e.info || ""}`).join("\n") + "\n";
   $("status").textContent = "保存中…";
   const res = await fetch(API, {
     method: "PUT",
