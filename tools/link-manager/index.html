@@ -833,7 +833,28 @@ async function deleteExtra(kind, idx) {
   else alert("削除に失敗しました");
 }
 
+// ===== 自動更新チェック =====
+// GitHub Pages 上の自分自身を取得し、内容が変わっていればリロードする
+async function checkForUpdate() {
+  try {
+    const res = await fetch(location.pathname + "?_cb=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) return;
+    const text = await res.text();
+    let h = 0;
+    for (let i = 0; i < text.length; i++) { h = ((h << 5) - h + text.charCodeAt(i)) | 0; }
+    const sig = String(h);
+    const prev = localStorage.getItem("app_sig");
+    if (prev && prev !== sig) {
+      localStorage.setItem("app_sig", sig);
+      location.reload(true);
+      return;
+    }
+    localStorage.setItem("app_sig", sig);
+  } catch (e) {}
+}
+
 function init() {
+  checkForUpdate();
   const has = !!token();
   $("setup").hidden = has;
   $("app").hidden = !has;
