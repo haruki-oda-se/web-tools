@@ -362,6 +362,16 @@ function render() {
   }
 }
 
+function histBadge(key) {
+  const h = history[key.slice(0, 50)] || history[key];
+  if (!h || h.count === 0) return "";
+  const warn = h.count >= 2;
+  return `<p style="margin:0 0 6px;">
+    <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:${warn ? "#f6e4e4" : "var(--paper)"};color:${warn ? "#b3261e" : "#6b645a"};border:1px solid ${warn ? "#e6bcbc" : "var(--line)"};">
+      ${warn ? "⚠️ " : ""}生成${h.count}回${h.last ? " / 最終 " + esc(h.last) : ""}
+    </span></p>`;
+}
+
 function prodCard(e, mode) {
   const imgTag = e.img
     ? `<img src="${esc(e.img)}" alt="" style="width:80px;height:80px;object-fit:contain;border:1px solid var(--line);border-radius:8px;background:#fff;flex-shrink:0;">`
@@ -416,6 +426,7 @@ function prodCard(e, mode) {
       ${imgTag}
       <div style="flex:1;min-width:0;">
         <p class="pname" style="margin:0 0 4px;font-size:14px;">${esc(e.key)}</p>
+        ${histBadge(e.key)}
         ${e.info ? `<p style="font-size:12px;color:#6b645a;margin:0 0 8px;line-height:1.5;">${esc(e.info.slice(0,110))}</p>` : ""}
         ${btn}
       </div>
@@ -591,8 +602,25 @@ const OUTLINE_PATH = "article_outlines.txt";
 const PLACE_PATH = "image_placements.txt";
 let outlines = {}, placements = {}, placeSha = null;
 
+const HISTORY_PATH = "single_history.txt";
+let history = {};
+
+async function loadHistory() {
+  history = {};
+  const h = await ghGet(HISTORY_PATH);
+  if (!h) return;
+  h.text.split("\n").filter(l => l.trim() && !l.startsWith("#")).forEach(l => {
+    const p = l.split("|||").map(x => x.trim());
+    if (!p[0]) return;
+    history[p[0]] = history[p[0]] || { count: 0, last: "" };
+    history[p[0]].count++;
+    if (p[1] && p[1] > history[p[0]].last) history[p[0]].last = p[1];
+  });
+}
+
 async function loadOutlines() {
   outlines = {}; placements = {};
+  await loadHistory();
   const [ol, pl] = await Promise.all([ghGet(OUTLINE_PATH), ghGet(PLACE_PATH)]);
   if (ol) {
     ol.text.split("\n").filter(l => l.trim() && !l.startsWith("#")).forEach(l => {
