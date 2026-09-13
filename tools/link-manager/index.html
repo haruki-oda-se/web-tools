@@ -345,6 +345,12 @@ function render() {
       return e.url && u !== "NONE" && e.status !== "SINGLE" && e.status !== "SINGLE_READY" && e.status !== "DONE" && !e.hidden;
     });
     let html = "";
+    if (singleDirty) {
+      html += `<div style="background:#fff7e6;border:1px solid #e8c98a;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:flex;align-items:center;gap:10px;">
+        <span style="font-size:13px;color:#7a5a1e;flex:1;">未保存の変更があります</span>
+        <button id="singleSaveBtn" class="save-url" onclick="saveSingleChanges()">入力した分を保存</button>
+      </div>`;
+    }
     if (singleQ.length > 0) {
       html += `<p style="font-size:13px;color:#6b645a;padding:8px 0;">✅ 記事化する商品 <b>${singleQ.length}</b> 件</p>`;
       html += singleQ.map(e => prodCard(e, "selected")).join("");
@@ -356,6 +362,15 @@ function render() {
     if (singleDone.length > 0) {
       html += `<details style="margin-top:20px;"><summary style="cursor:pointer;font-weight:600;color:#6b645a;">生成済み ${singleDone.length} 件</summary>`;
       html += singleDone.map(e => prodCard(e, "done")).join("");
+      html += `</details>`;
+    }
+    const hiddenList = entries.filter(e => e.hidden);
+    if (hiddenList.length > 0) {
+      html += `<details style="margin-top:16px;"><summary style="cursor:pointer;font-weight:600;color:#6b645a;">非表示 ${hiddenList.length} 件</summary>`;
+      html += hiddenList.map(e => `<div class="card" style="margin-top:8px;opacity:0.6;">
+        <p class="pname" style="font-size:13px;">${esc(e.key)}</p>
+        <button class="ghost" style="font-size:12px;padding:4px 10px;" data-skey="${esc(e.key)}" onclick="setSingle(this,'')">表示に戻す</button>
+      </div>`).join("");
       html += `</details>`;
     }
     sw.innerHTML = html;
@@ -373,12 +388,14 @@ function histBadge(key) {
 }
 
 function prodCard(e, mode) {
-  const imgTag = e.img
-    ? `<img src="${esc(e.img)}" alt="" style="width:80px;height:80px;object-fit:contain;border:1px solid var(--line);border-radius:8px;background:#fff;flex-shrink:0;">`
+  const firstImg = (e.img || "").split(",")[0].trim();
+  const imgTag = firstImg
+    ? `<img src="${esc(firstImg)}" alt="" style="width:80px;height:80px;object-fit:contain;border:1px solid var(--line);border-radius:8px;background:#fff;flex-shrink:0;">`
     : `<div style="width:80px;height:80px;border:1px solid var(--line);border-radius:8px;background:var(--paper);flex-shrink:0;"></div>`;
   let btn = "";
   if (mode === "candidate") {
-    btn = `<button class="save-url" data-skey="${esc(e.key)}" onclick="setSingle(this,'SINGLE')">📝 記事化する</button>`;
+    btn = `<button class="save-url" data-skey="${esc(e.key)}" onclick="setSingle(this,'SINGLE')">📝 記事化する</button>
+      <button class="ghost" style="font-size:12px;padding:6px 12px;margin-left:6px;" data-skey="${esc(e.key)}" onclick="setSingle(this,'HIDDEN')">🙈 非表示</button>`;
   } else if (mode === "selected") {
     btn = `<button class="ghost" style="font-size:12px;padding:6px 12px;" data-skey="${esc(e.key)}" onclick="setSingle(this,'')">選択を外す</button>`;
   } else {
@@ -435,21 +452,33 @@ function prodCard(e, mode) {
   </div>`;
 }
 
-async function setSingle(btn, newStatus) {
+let singleDirty = false;
+
+function setSingle(btn, newStatus) {
   const key = btn.dataset.skey;
   const e = entries.find(x => x.key === key);
   if (!e) return;
   e.status = newStatus;
-  btn.textContent = "保存中…"; btn.disabled = true;
+  singleDirty = true;
+  render();
+}
+
+async function saveSingleChanges() {
+  const bar = document.getElementById("singleSaveBtn");
+  if (bar) { bar.textContent = "保存中…"; bar.disabled = true; }
   const text = "# 商品名キー | AmazonリンクURL | 検索語 | 状態 | 画像URL | 商品情報\n"
     + entries.map(x => `${x.key} | ${x.url} | ${x.term || ""} | ${x.status || ""} | ${x.img || ""} | ${x.info || ""}`).join("\n") + "\n";
-  const res = await fetch(API, {
-    method: "PUT",
-    headers: { Authorization: "Bearer " + token(), Accept: "application/vnd.github+json" },
-    body: JSON.stringify({ message: "update: single article candidate", content: b64encode(text), sha })
-  });
-  if (res.ok) { const d = await res.json(); sha = d.content.sha; render(); }
-  else { btn.textContent = "❌ 失敗"; btn.disabled = false; }
+  const newSha = await ghPut("amazon_links.txt", text, sha, "update: single article selection");
+  let ok = !!newSha;
+  if (newSha) sha = newSha;
+  if (ok) ok = await savePlacements();
+  if (ok) {
+    singleDirty = false;
+    if (bar) { bar.textContent = "✅ 保存しました"; }
+    setTimeout(() => render(), 800);
+  } else {
+    if (bar) { bar.textContent = "❌ 保存に失敗"; bar.disabled = false; }
+  }
 }
 
 function cleanKey(k) {
@@ -652,12 +681,12 @@ async function savePlacements() {
   return false;
 }
 
-async function setPlacement(key, imgIdx, para) {
+function setPlacement(key, imgIdx, para) {
   placements[key] = placements[key] || {};
   if (para) placements[key][imgIdx] = para;
   else delete placements[key][imgIdx];
-  const ok = await savePlacements();
-  if (ok) render(); else alert("保存に失敗しました");
+  singleDirty = true;
+  render();
 }
 
 async function loadImprove() {
