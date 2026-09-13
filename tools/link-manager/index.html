@@ -414,21 +414,29 @@ function prodCard(e, mode) {
       const pk = e.key.slice(0,50);
       const cur = placements[pk] || {};
       let secPrev = "";
-      outlineHtml = `<p style="font-size:12px;color:#6b645a;margin:10px 0 6px;">段落を選んで画像を配置してください</p>
+      const hasThird = imgs.length > 2;
+      const slot = (n, pos, label) => {
+        const p2 = cur["2"], p3 = cur["3"];
+        const m2 = p2 && p2.para === n && (p2.pos || "after") === pos;
+        const m3 = p3 && p3.para === n && (p3.pos || "after") === pos;
+        if (m2 || m3) {
+          const mk = m2 ? "2" : "3";
+          return `<span style="font-size:11px;background:var(--accent);color:#fff;padding:2px 8px;border-radius:6px;">画像${mk} <a href="#" onclick="event.preventDefault();setPlacement('${esc(pk)}','${mk}','')" style="color:#fff;text-decoration:none;">×</a></span>`;
+        }
+        return `<button class="ghost" style="font-size:11px;padding:1px 7px;" onclick="setPlacement('${esc(pk)}','2','${esc(n)}','${pos}')">${label}＋2</button>`
+          + (hasThird ? `<button class="ghost" style="font-size:11px;padding:1px 7px;margin-left:4px;" onclick="setPlacement('${esc(pk)}','3','${esc(n)}','${pos}')">${label}＋3</button>` : "");
+      };
+      outlineHtml = `<p style="font-size:12px;color:#6b645a;margin:10px 0 6px;">画像を置く位置を選んでください(見出し直後／各段落の後)</p>
         <div style="border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--paper);">`;
       ol.forEach(o => {
         if (o.sec !== secPrev) {
-          outlineHtml += `<p style="font-size:11px;color:#6b645a;margin:8px 0 4px;font-weight:600;">## ${esc(o.sec)}</p>`;
+          outlineHtml += `<p style="font-size:11px;color:#6b645a;margin:10px 0 3px;font-weight:600;">## ${esc(o.sec)}</p>`;
+          outlineHtml += `<div style="margin:0 0 6px 4px;">${slot(o.n, "before", "見出し直後")}</div>`;
           secPrev = o.sec;
         }
-        const has2 = cur["2"] === o.n, has3 = cur["3"] === o.n;
-        const mark = has2 ? "2" : (has3 ? "3" : "");
-        outlineHtml += `<div style="border-left:2px solid ${mark ? "var(--accent)" : "var(--line)"};padding-left:8px;margin-bottom:5px;">
+        outlineHtml += `<div style="border-left:2px solid var(--line);padding-left:8px;margin-bottom:6px;">
           <p style="font-size:12px;margin:0 0 3px;line-height:1.5;">${esc(o.sum)}</p>
-          ${mark
-            ? `<span style="font-size:11px;background:var(--accent);color:#fff;padding:2px 8px;border-radius:6px;">画像${mark}を配置 <a href="#" onclick="event.preventDefault();setPlacement('${esc(pk)}','${mark}','')" style="color:#fff;text-decoration:none;">×</a></span>`
-            : `<button class="ghost" style="font-size:11px;padding:2px 8px;" onclick="setPlacement('${esc(pk)}','2','${esc(o.n)}')">＋画像2</button>
-               ${imgs.length > 2 ? `<button class="ghost" style="font-size:11px;padding:2px 8px;" onclick="setPlacement('${esc(pk)}','3','${esc(o.n)}')">＋画像3</button>` : ""}`}
+          ${slot(o.n, "after", "この後に")}
         </div>`;
       });
       outlineHtml += `</div>`;
@@ -663,7 +671,7 @@ async function loadOutlines() {
     pl.text.split("\n").filter(l => l.trim() && !l.startsWith("#")).forEach(l => {
       const p = l.split("|||").map(x => x.trim());
       if (p.length < 3) return;
-      (placements[p[0]] = placements[p[0]] || {})[p[1]] = p[2];
+      (placements[p[0]] = placements[p[0]] || {})[p[1]] = { para: p[2], pos: p[3] || "after" };
     });
   }
 }
@@ -672,18 +680,19 @@ async function savePlacements() {
   let lines = [];
   Object.keys(placements).forEach(k => {
     Object.keys(placements[k]).forEach(idx => {
-      if (placements[k][idx]) lines.push(`${k} ||| ${idx} ||| ${placements[k][idx]}`);
+      const v = placements[k][idx];
+      if (v && v.para) lines.push(`${k} ||| ${idx} ||| ${v.para} ||| ${v.pos || "after"}`);
     });
   });
-  const text = "# 商品キー ||| 画像番号 ||| 段落番号\n" + lines.join("\n") + "\n";
+  const text = "# 商品キー ||| 画像番号 ||| 段落番号 ||| 位置\n" + lines.join("\n") + "\n";
   const sha = await ghPut(PLACE_PATH, text, placeSha, "update: image placements");
   if (sha) { placeSha = sha; return true; }
   return false;
 }
 
-function setPlacement(key, imgIdx, para) {
+function setPlacement(key, imgIdx, para, pos) {
   placements[key] = placements[key] || {};
-  if (para) placements[key][imgIdx] = para;
+  if (para) placements[key][imgIdx] = { para: para, pos: pos || "after" };
   else delete placements[key][imgIdx];
   singleDirty = true;
   render();
